@@ -1,0 +1,1795 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e6470">
+<meta name="description" content="Programação de Manutenção: tarefas da equipe por especialidade e turno, com calendário.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Manutenção">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Programação de Manutenção</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: quadro por turno. Faixas de turno (central, manhã, noite) agrupam as colunas de especialidade; cartões arrastam entre colunas. */
+:root {
+  --bg: #f1f2ee;
+  --surface: #fbfbf9;
+  --col: #e6e8e2;
+  --line: #d3d6cd;
+  --fg: #1d2523;
+  --muted: #5d6762;
+  --accent: #0e6470;
+  --accent-fg: #ffffff;
+  --accent-soft: #d5e9eb;
+  --hi: #b3261e;
+  --hi-soft: #f6dcd9;
+  --mid: #9a6200;
+  --mid-soft: #f5e6c8;
+  --lo: #3d6b4a;
+  --lo-soft: #dcead9;
+  --drop: #0e6470;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131816; --surface: #1d2421; --col: #19201d; --line: #2f3a35;
+    --fg: #e6ebe7; --muted: #94a19a; --accent: #5cc0cc; --accent-fg: #0a1a1c;
+    --accent-soft: #1b3a3f; --hi: #f19a93; --hi-soft: #3d1f1d; --mid: #e6b45e;
+    --mid-soft: #3a2d14; --lo: #8cc59b; --lo-soft: #1f3326; --drop: #5cc0cc;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131816; --surface: #1d2421; --col: #19201d; --line: #2f3a35;
+  --fg: #e6ebe7; --muted: #94a19a; --accent: #5cc0cc; --accent-fg: #0a1a1c;
+  --accent-soft: #1b3a3f; --hi: #f19a93; --hi-soft: #3d1f1d; --mid: #e6b45e;
+  --mid-soft: #3a2d14; --lo: #8cc59b; --lo-soft: #1f3326; --drop: #5cc0cc;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.4; padding-inline: 16px; padding-block: 20px 32px; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wrap { max-width: 1500px; margin-inline: auto; display: flex; flex-direction: column; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
+.title { min-width: 0; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; line-height: 1; margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
+.sub { color: var(--muted); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.ver { font-family: var(--font-mono); font-size: 12px; font-weight: 500; background: var(--accent); color: var(--accent-fg); padding: 2px 8px; border-radius: 3px; letter-spacing: 0.04em; }
+.stats { display: flex; flex-wrap: nowrap; gap: 6px 10px; font-variant-numeric: tabular-nums; }
+.stat { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 3px 12px; min-height: 40px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; color: var(--fg); }
+.stat:hover { border-color: var(--accent); }
+.stat[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.stat b { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; }
+.stat.old b { color: var(--old); }
+
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: var(--mid-soft); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px; }
+.notice p { margin: 0; flex: 1 1 260px; min-width: 0; }
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; font-weight: 500; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+.board { display: flex; gap: 22px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+.shift { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
+.shift-head { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.shift-head::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.cols { display: flex; gap: 10px; align-items: flex-start; }
+.col { width: 268px; flex: 0 0 268px; background: var(--col); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-top: 3px solid var(--accent); }
+.col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.col-head h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; margin: 0; letter-spacing: 0.01em; }
+.col-head .count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.list { display: flex; flex-direction: column; gap: 8px; min-height: 56px; border-radius: 4px; }
+.col.over .list { outline: 2px dashed var(--drop); outline-offset: 2px; }
+.empty { color: var(--muted); font-size: 13px; padding: 14px 6px; text-align: center; border: 1px dashed var(--line); border-radius: 4px; }
+.drop-line { height: 3px; background: var(--drop); border-radius: 2px; flex: 0 0 3px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 9px 10px 8px 12px; display: flex; flex-direction: column; gap: 6px; position: relative; cursor: grab; }
+.card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--lo); border-radius: 4px 0 0 4px; }
+.card.p-alta::before { background: var(--hi); }
+.card.p-media::before { background: var(--mid); }
+.card.dragging { opacity: 0.4; }
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.os { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.pill.alta { background: var(--hi-soft); color: var(--hi); }
+.pill.media { background: var(--mid-soft); color: var(--mid); }
+.pill.baixa { background: var(--lo-soft); color: var(--lo); }
+.card h3 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--muted); font-size: 12.5px; min-width: 0; }
+.meta .old, .card h3.old { color: var(--old); font-weight: 700; }
+.card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding-top: 4px; border-top: 1px solid var(--line); }
+.card-foot select { flex: 1 1 80px; min-width: 0; max-width: 150px; background: var(--col); border: 1px solid var(--line); border-radius: 3px; padding: 2px 4px; font-size: 12px; }
+.icon-btn { background: none; border: none; color: var(--muted); font-size: 12px; padding: 2px 4px; border-radius: 3px; }
+.icon-btn:hover { color: var(--fg); text-decoration: underline; }
+.icon-btn.del:hover { color: var(--hi); }
+.add-btn { background: none; border: 1px dashed var(--line); color: var(--muted); border-radius: 4px; padding: 6px; font-weight: 500; }
+.add-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+form.edit { display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--accent); border-radius: 4px; padding: 8px; }
+form.edit label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+form.edit input, form.edit select { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; font-size: 13px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--fg); min-width: 0; }
+form.edit .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+form.edit .actions { display: flex; gap: 6px; justify-content: flex-end; }
+:root { --old: #d9483f; --c-real: #2a78d6; --c-pend: #eb6834; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --old: #ff9a90; --c-real: #3987e5; --c-pend: #d95926; } }
+:root[data-theme="dark"] { --old: #ff9a90; --c-real: #3987e5; --c-pend: #d95926; }
+#dash { display: flex; flex-direction: column; gap: 14px; max-width: 920px; width: 100%; margin-inline: auto; }
+.dash-filters { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.seg-ctl, .presets { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.seg-ctl button, .presets button { background: none; border: none; border-right: 1px solid var(--line); padding: 6px 12px; font-weight: 500; color: var(--fg); }
+.seg-ctl button:last-child, .presets button:last-child { border-right: none; }
+.seg-ctl button:hover, .presets button:hover { background: var(--col); }
+.seg-ctl button[aria-pressed="true"], .presets button[aria-pressed="true"] { background: var(--accent-soft); font-weight: 600; }
+.ruler-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 26px 10px; display: flex; flex-direction: column; gap: 6px; }
+.ruler { position: relative; height: 74px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
+.r-track { position: absolute; left: 0; right: 0; top: 40px; height: 4px; background: var(--line); border-radius: 2px; }
+.r-range { position: absolute; top: 40px; height: 4px; background: var(--accent); }
+.r-tick { position: absolute; top: 33px; width: 1px; height: 6px; background: var(--muted); opacity: 0.45; }
+.r-lab { position: absolute; top: 54px; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.r-handle { position: absolute; top: 33px; width: 18px; height: 18px; margin-left: -9px; padding: 0; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); cursor: grab; z-index: 2; }
+.r-bubble { position: absolute; bottom: 24px; background: var(--fg); color: var(--bg); font-size: 11px; line-height: 1.4; padding: 1px 6px; border-radius: 3px; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.r-bubble.from { right: 50%; }
+.r-bubble.to { left: 50%; }
+.r-read { font-weight: 600; font-variant-numeric: tabular-nums; }
+.r-note { color: var(--muted); font-size: 12.5px; }
+.dash-card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.dash-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 14px; }
+.dash-card h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; margin: 0; }
+.dash-sub { color: var(--muted); font-size: 12.5px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: 12.5px; }
+.legend .key { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 2px; }
+.sw.real, .seg.real { background: var(--c-real); }
+.sw.pend, .seg.pend { background: var(--c-pend); }
+.bar-row { display: grid; grid-template-columns: minmax(96px, 170px) minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding-block: 6px; }
+.bl-name { font-weight: 600; overflow-wrap: anywhere; }
+.bl-sub { display: block; color: var(--muted); font-size: 12px; }
+.bar-area { border-left: 1px solid var(--line); height: 22px; display: flex; align-items: center; min-width: 0; }
+.bar { display: flex; gap: 2px; height: 20px; min-width: 0; }
+.seg { height: 100%; min-width: 6px; border-radius: 0; }
+.seg:last-child { border-radius: 0 4px 4px 0; }
+.seg:hover { filter: brightness(1.12); }
+.bar-val { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dash-empty { color: var(--muted); padding: 18px 6px; text-align: center; border: 1px dashed var(--line); border-radius: 4px; }
+.tip { position: fixed; z-index: 20; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); pointer-events: none; font-size: 12.5px; }
+.tip b { font-size: 14px; margin-right: 4px; }
+.tip span { color: var(--muted); }
+.dash-card details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+.tbl-wrap { overflow-x: auto; margin-top: 6px; }
+.tbl-wrap table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.tbl-wrap th, .tbl-wrap td { text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tbl-wrap th.n, .tbl-wrap td.n { text-align: right; }
+@media (max-width: 520px) {
+  .bar-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .bar-row .bar-label { grid-column: 1 / -1; }
+}
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.status { color: var(--muted); font-size: 13px; min-width: 0; }
+.databox { background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+.databox h2 { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; margin: 0; }
+.databox p { margin: 0; }
+.databox textarea { width: 100%; min-height: 150px; resize: vertical; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font-family: var(--font-mono); font-size: 12px; }
+.databox .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab { background: none; border: none; border-bottom: 3px solid transparent; padding: 6px 14px; font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; color: var(--muted); margin-bottom: -1px; }
+.tab:hover { color: var(--fg); }
+.tab[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+.ok-btn { background: var(--accent); color: var(--accent-fg); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 9px; font-weight: 600; font-size: 12px; }
+.ok-btn:hover { filter: brightness(1.1); }
+#done { display: flex; flex-direction: column; gap: 18px; }
+.done-group { display: flex; flex-direction: column; gap: 4px; max-width: 760px; }
+.done-group h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; margin: 0; padding-bottom: 4px; border-bottom: 3px solid var(--accent); }
+.done-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.done-main { flex: 1 1 260px; min-width: 0; }
+.done-title { font-weight: 600; overflow-wrap: anywhere; }
+a.btn { text-decoration: none; display: inline-block; }
+a.btn[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+.head-actions { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.settings { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.set-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.set-head h2 { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; margin: 0; }
+.set-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-block: 6px; border-top: 1px solid var(--line); }
+.set-row input[type="text"] { flex: 1 1 180px; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 5px 8px; }
+.set-row select { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 5px 6px; min-width: 0; }
+.set-row .n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); min-width: 74px; }
+.set-confirm { flex: 1 1 100%; background: var(--mid-soft); border-radius: 4px; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.set-confirm span { flex: 1 1 200px; min-width: 0; }
+.btn.danger:hover { border-color: var(--hi); color: var(--hi); }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+footer { color: var(--muted); font-size: 12.5px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.foot-info { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.title-row { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+header > .stats { flex: 1 1 100%; justify-content: center; align-items: center; min-width: 0; }
+.stat-ic { display: inline-flex; }
+.stat-ic svg { width: 16px; height: 16px; }
+@media (max-width: 480px) {
+  .stat { padding: 3px 8px; gap: 4px; font-size: 13px; }
+  .stat b { font-size: 1.2rem; }
+  .stat-ic { display: none; }
+}
+.icons { display: flex; flex-direction: column; gap: 5px; flex: 0 0 auto; }
+.icon-tool { position: relative; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; text-decoration: none; }
+.icon-tool:hover { border-color: var(--accent); color: var(--accent); }
+.icon-tool[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.icon-tool[aria-disabled="true"], .icon-tool[disabled] { opacity: 0.5; pointer-events: none; }
+.icon-tool svg { width: 16px; height: 16px; }
+.icon-tool[data-flash]::after { content: attr(data-flash); position: absolute; top: 50%; transform: translateY(-50%); left: calc(100% + 6px); background: var(--fg); color: var(--bg); padding: 3px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; z-index: 5; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+@media (prefers-reduced-motion: no-preference) { .card { transition: opacity .15s; } }
+
+:root { --ev-limp: #1baf7a; --ev-vis: #2a78d6; --ev-out: #898781; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ev-limp: #199e70; --ev-vis: #3987e5; --ev-out: #898781; } }
+:root[data-theme="dark"] { --ev-limp: #199e70; --ev-vis: #3987e5; --ev-out: #898781; }
+#cal { display: flex; flex-direction: column; gap: 14px; max-width: 1000px; width: 100%; margin-inline: auto; }
+.cal-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.cal-head h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; margin: 0; min-width: 190px; text-align: center; }
+.cal-head .grow { flex: 1; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-wd { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; font-size: 0.9rem; }
+.day { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; min-height: 92px; padding: 3px 4px 4px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-width: 0; }
+.day.blank { background: none; border-color: transparent; cursor: default; }
+.day:hover:not(.blank) { border-color: var(--accent); }
+.day.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.dn { align-self: flex-start; background: none; border: none; padding: 0 3px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); border-radius: 3px; }
+.day.today .dn { background: var(--accent); color: var(--accent-fg); font-weight: 500; }
+.chip { display: block; width: 100%; text-align: left; background: var(--col); border: none; border-left: 4px solid var(--ev-out); border-radius: 3px; padding: 1px 4px; font-size: 11.5px; line-height: 1.25; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip:hover { filter: brightness(0.96); text-decoration: underline; }
+.chip.cat-limpeza, .dot.cat-limpeza { border-color: var(--ev-limp); }
+.chip.cat-visita, .dot.cat-visita { border-color: var(--ev-vis); }
+.chip.cont { opacity: 0.75; }
+.more { font-size: 11px; color: var(--muted); padding-left: 3px; }
+.dot { display: inline-block; width: 0; height: 12px; border-left: 4px solid var(--ev-out); border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: 12.5px; }
+.ev-list h3 { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; margin: 0 0 4px; padding-bottom: 4px; border-bottom: 3px solid var(--accent); }
+.ev-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ev-main { flex: 1 1 260px; min-width: 0; }
+.ev-title { font-weight: 600; overflow-wrap: anywhere; }
+.ev-meta { color: var(--muted); font-size: 12.5px; }
+.ev-list details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; padding-top: 8px; }
+form.ev-form { max-width: 560px; }
+form.ev-form .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.modal { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal[hidden] { display: none; }
+.modal-box { background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 16px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3); }
+.modal-box h2 { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; margin: 0; }
+.opt { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.opt.off { opacity: 0.5; cursor: not-allowed; }
+.opt small { color: var(--muted); margin-left: auto; }
+.modal-box .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+@media (max-width: 640px) { .day { min-height: 64px; } .chip { font-size: 10.5px; padding: 0 3px; } }
+
+/* Computador: a partir de 900 px o quadro ocupa a largura da janela, sem rolagem lateral. Celular não muda. */
+@media (min-width: 900px) {
+  body { padding-inline: 28px; }
+  .wrap { max-width: 1480px; }
+  .board { flex-wrap: wrap; overflow-x: visible; gap: 22px 18px; }
+  .shift { flex: var(--n, 1) 1 calc(var(--n, 1) * 180px + (var(--n, 1) - 1) * 10px); min-width: 0; max-width: calc(var(--n, 1) * 330px + (var(--n, 1) - 1) * 10px); }
+  .shift .cols { gap: 10px; }
+  .col { width: auto; flex: 1 1 0; min-width: 0; }
+  #cal { max-width: 1200px; }
+  .day { min-height: 112px; }
+  #dash { max-width: 1100px; }
+  #done .done-group { max-width: 900px; }
+}
+@media (min-width: 1700px) {
+  .wrap { max-width: 1760px; }
+  body { font-size: 15px; }
+  .day { min-height: 128px; }
+}
+.tabs { overflow-x: auto; scrollbar-width: thin; }
+.tab { white-space: nowrap; }
+@media (max-width: 480px) {
+  .stat.dash .stat-txt, .stat.cal .stat-txt { display: none; }
+  .stat.dash .stat-ic, .stat.cal .stat-ic { display: inline-flex; }
+  .stat.dash, .stat.cal { padding-inline: 10px; }
+  .tab { padding: 6px 9px; font-size: 1.05rem; }
+}
+@supports (padding: max(0px)) {
+  body { padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+}
+#cloud:not(:empty)::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+#cloud[data-s="ok"]::before { background: var(--lo); }
+#cloud[data-s="err"]::before { background: var(--hi); }
+#cloud[data-s="wait"]::before { background: var(--mid); }
+.modal.block { background: var(--bg); }
+.modal-box.wide { max-width: 560px; max-height: 92vh; overflow: auto; }
+.photos { display: flex; flex-wrap: wrap; gap: 4px; }
+.ph { position: relative; width: 58px; height: 58px; padding: 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--col); }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph b { position: absolute; left: 0; bottom: 0; font-size: 10px; line-height: 1; padding: 2px 4px; background: rgba(0,0,0,.6); color: #fff; border-radius: 0 3px 0 0; font-weight: 600; }
+.ph:hover { border-color: var(--accent); }
+.sheet-list { display: flex; flex-direction: column; }
+.sheet-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+.sheet-row .who { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.sheet-row small { color: var(--muted); display: block; }
+.sheet-msg { margin: 0; padding: 6px 8px; border-radius: 4px; background: var(--accent-soft); }
+.sheet h3, .modal-box h3 { font-family: var(--font-display); font-size: 1.1rem; margin: 6px 0 0; letter-spacing: .02em; }
+.modal-box form.inline { display: flex; flex-wrap: wrap; gap: 6px; }
+.modal-box form.inline input { flex: 1 1 160px; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 6px 8px; }
+.viewer img { width: 100%; max-height: 60vh; object-fit: contain; background: var(--col); border-radius: 4px; }
+@media (max-width: 520px) { input, select { font-size: 16px; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="title-row">
+    <div class="title">
+      <h1>Programação de Manutenção</h1>
+      <div class="sub"><span id="hoje"></span></div>
+    </div>
+      <div class="icons">
+        <button class="icon-tool" id="config" type="button" aria-expanded="false" aria-controls="settings" aria-label="Configurar categorias" title="Configurar categorias">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5" stroke-width="3.2" stroke-dasharray="3.1 3.05"/></svg>
+        </button>
+        <button class="icon-tool" id="whats" type="button" aria-haspopup="dialog" aria-label="Enviar por WhatsApp" title="Enviar por WhatsApp">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.5L3 20.5l1.6-5.4A8.5 8.5 0 1 1 21 11.5z"/></svg>
+        </button>
+        <button class="icon-tool" id="copiar" type="button" aria-label="Copiar mensagem" title="Copiar mensagem">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+        </button>
+        <button class="icon-tool" id="usuarios" type="button" aria-label="Usuários" title="Usuários (administradora)" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+  <section class="settings" id="settings" aria-label="Configuração de categorias" hidden></section>
+  <div class="notice" id="notice">
+    <p>As tarefas abaixo são exemplos para mostrar como o quadro funciona. Arraste os cartões entre as colunas ou use o campo "Mover para" no celular.</p>
+    <button class="btn primary" id="limpar" type="button">Limpar exemplos</button>
+    <button class="btn" id="ocultar" type="button">Ocultar aviso</button>
+  </div>
+  <nav class="tabs" id="tabs" aria-label="Telas"></nav>
+  <p class="hint" id="hint">Clique nos números do topo para filtrar e clique de novo para voltar a todas. Dentro de cada coluna, solte o cartão entre outros dois para definir a ordem de execução.</p>
+  <main class="board" id="board" aria-label="Quadro de tarefas por especialidade e turno"></main>
+  <section id="done" aria-label="Tarefas realizadas" hidden></section>
+  <section id="dash" aria-label="Dashboards" hidden></section>
+  <section id="cal" aria-label="Calendário de programações" hidden></section>
+  <section class="databox" id="databox" aria-label="Importar ou exportar dados" hidden></section>
+  <div class="modal" id="wmodal" role="dialog" aria-modal="true" aria-label="Enviar por WhatsApp" hidden></div>
+  <div class="modal block" id="login" role="dialog" aria-modal="true" aria-label="Entrar" hidden>
+    <div class="modal-box">
+      <h2 id="login-t">Entrar</h2>
+      <p class="hint" style="margin:0">Entre com sua conta Google (Gmail). Só entra quem a administradora liberou.</p>
+      <p class="hint" id="login-msg" style="margin:0;color:var(--hi)"></p>
+      <div class="actions"><button class="btn primary" id="login-btn" type="button">Entrar com Google</button><button class="btn" id="login-out" type="button" hidden>Sair / trocar de conta</button></div>
+    </div>
+  </div>
+  <div class="modal" id="sheet" role="dialog" aria-modal="true" hidden></div>
+  <input id="foto-file" type="file" accept="image/*" hidden>
+  <footer>
+    <div class="toolbar" id="toolbar">
+      <button class="btn" id="exp-json" type="button">Exportar dados</button>
+      <button class="btn" id="imp" type="button">Importar dados</button>
+      <input id="imp-file" type="file" accept=".json,application/json" hidden>
+      <button class="btn" id="exp-csv" type="button">Exportar CSV</button>
+      <button class="btn" id="drive" type="button" hidden>Fotos e Drive</button>
+      <button class="btn" id="instalar" type="button" hidden>Instalar app</button>
+      <button class="btn" id="sair" type="button" hidden>Sair</button>
+      <span class="status" id="status" role="status" aria-live="polite"></span>
+    </div>
+    <div class="foot-info">
+      <span class="ver" id="ver">VERSÃO 1.7</span>
+      <span>Login Google, usuários e fotos no Drive</span>
+      <span id="cloud" role="status" aria-live="polite"></span>
+      <span>Tarefas e programações ficam na nuvem e também neste aparelho.</span>
+    </div>
+  </footer>
+</div>
+
+<script src="firebase-config.js"></script>
+<script>
+(function () {
+  var VERSION = "1.7";
+  var KEY = "manutencao-quadro-v0";
+  var OLD_DAYS = 30;
+  var DEFAULT_COLS = [
+    { id: "hid", name: "Hidráulica", shift: "central" },
+    { id: "p1", name: "Predial 1", shift: "central" },
+    { id: "p2", name: "Predial 2", shift: "central" },
+    { id: "mec", name: "Mecânico", shift: "central" },
+    { id: "elm", name: "Eletricista", shift: "manha" },
+    { id: "eln", name: "Eletricista", shift: "noite" }
+  ];
+  var SHIFTS = [
+    { id: "central", name: "Turno central" },
+    { id: "manha", name: "Turno manhã" },
+    { id: "noite", name: "Turno noite" }
+  ];
+  var PRIO = { alta: "Alta", media: "Média", baixa: "Baixa" };
+
+  function iso(offset) {
+    var d = new Date(); d.setDate(d.getDate() + offset);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  var todayIso = iso(0);
+
+  var SEED_VERSION = "1.3";
+  var SEED_DATE = "2026-10-06";
+  var SEED_TASKS = [
+    { col: "eln", title: "Pegar abajur e móvel da boi Lourdes para a antiga primalinea" },
+    { col: "eln", title: "Continuar leitura de energia" },
+    { col: "eln", title: "Trocar sensor da caixa d'água" },
+    { col: "p1", title: "Pintar sinalização horizontal poliureia no G2 descoberto" },
+    { col: "p2", title: "Limpeza do portão" },
+    { col: "elm", title: "Troca de sensor de escadas 02" },
+    { col: "elm", title: "Continuar leitura de energia" },
+    { col: "mec", title: "Talento nas casas de máquina" },
+    { col: "hid", title: "Verificar situação do registro da purga na torre de resfriamento" }
+  ];
+  var EXAMPLE_IDS = ["OS-001", "OS-002", "OS-003", "OS-004", "OS-005", "OS-006", "OS-007", "OS-008", "OS-009", "OS-010", "OS-011", "OS-012", "EX-1", "EX-2"];
+
+  var state;
+  try { var raw = localStorage.getItem(KEY); state = raw ? JSON.parse(raw) : null; } catch (e) { state = null; }
+  if (!state || !Array.isArray(state.tasks)) state = { next: 1, example: false, hideNotice: true, tasks: [] };
+  if (!Array.isArray(state.cols) || !state.cols.length) state.cols = DEFAULT_COLS.map(function (c) { return { id: c.id, name: c.name, shift: c.shift }; });
+  state.tasks.forEach(function (t) { if (!t.created) t.created = todayIso; delete t.due; });
+  if (state.seed !== SEED_VERSION) {
+    if (state.example) {
+      state.tasks = state.tasks.filter(function (t) { return EXAMPLE_IDS.indexOf(t.id) < 0; });
+      if (!state.tasks.length) state.next = 1;
+    }
+    if (!state.next) state.next = 1;
+    SEED_TASKS.forEach(function (r) {
+      if (!state.cols.some(function (c) { return c.id === r.col; })) return;
+      var dup = state.tasks.some(function (t) { return t.col === r.col && t.title === r.title && !t.done; });
+      if (!dup) state.tasks.push({ id: "OS-" + pad(state.next++), col: r.col, title: r.title, prio: "media", local: "", created: SEED_DATE });
+    });
+    state.example = false; state.hideNotice = true; state.seed = SEED_VERSION;
+  }
+  if (!Array.isArray(state.events)) state.events = [];
+  function evNextId() { var m = 0; state.events.forEach(function (e) { var r = /^EV-(\d+)$/.exec(e.id || ""); if (r) m = Math.max(m, +r[1]); }); return "EV-" + (m + 1); }
+  if (state.evSeed !== "1.4") {
+    [{ title: "Limpeza de torre", start: "2026-10-08", end: "2026-10-09", cat: "limpeza" },
+     { title: "Visita Daikin – manutenção do chiller", start: "2026-10-19", end: "2026-10-24", cat: "visita" }].forEach(function (r) {
+      if (!state.events.some(function (e) { return e.title === r.title && e.start === r.start; }))
+        state.events.push({ id: evNextId(), title: r.title, start: r.start, end: r.end, time: "", cat: r.cat, note: "" });
+    });
+    state.evSeed = "1.4";
+  }
+  state.ver = VERSION;
+  var ui = { adding: null, editing: null, settings: false, removing: null, filter: null, view: "quadro", wopen: false, wmode: "ambos", cal: { month: todayIso.slice(0, 7), form: null }, dash: { status: "todas", from: null, to: null } };
+  function matches(t) { return !t.done && (!ui.filter || (ui.filter === "alta" ? t.prio === "alta" : daysOpen(t.created) > OLD_DAYS)); }
+  function setFilter(f) { ui.filter = ui.filter === f ? null : f; render(); }
+
+  function localSave() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function save() { localSave(); cloudPush(); }
+
+  function h(tag, attrs, kids) {
+    var el = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (k === "class") el.className = attrs[k];
+      else if (k === "text") el.textContent = attrs[k];
+      else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), attrs[k]);
+      else if (attrs[k] !== false && attrs[k] != null) el.setAttribute(k, attrs[k]);
+    }
+    (kids || []).forEach(function (c) { if (c) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return el;
+  }
+  function fmtDate(s) { var p = s.split("-"); return p[2] + "/" + p[1] + "/" + p[0]; }
+  function fmtShort(s) { var p = s.split("-"); return p[2] + "/" + p[1]; }
+  function daysOpen(s) {
+    var a = s.split("-"), b = todayIso.split("-");
+    var d1 = new Date(+a[0], +a[1] - 1, +a[2]), d2 = new Date(+b[0], +b[1] - 1, +b[2]);
+    return Math.max(0, Math.round((d2 - d1) / 86400000));
+  }
+  function daysLabel(n) { return n === 0 ? "Aberta hoje" : n === 1 ? "1 dia em aberto" : n + " dias em aberto"; }
+  function colLabel(c) { var s = SHIFTS.filter(function (x) { return x.id === c.shift; })[0]; return c.name + " (" + s.name.toLowerCase() + ")"; }
+  function pad(n) { return String(n).padStart(3, "0"); }
+
+  function formFor(task, colId) {
+    var isNew = !task;
+    var t = task || { title: "", prio: "media", local: "" };
+    var uid = (isNew ? "new-" + colId : task.id);
+    var title = h("input", { id: "t-" + uid, type: "text", required: "required", value: t.title, maxlength: "120" });
+    var prio = h("select", { id: "p-" + uid }, Object.keys(PRIO).map(function (k) { return h("option", { value: k, text: PRIO[k], selected: k === t.prio ? "selected" : false }); }));
+    var local = h("input", { id: "l-" + uid, type: "text", value: t.local, maxlength: "60" });
+    var form = h("form", { class: "edit", onsubmit: function (e) {
+      e.preventDefault();
+      var v = title.value.trim(); if (!v) return;
+      if (isNew) {
+        state.tasks.push({ id: "OS-" + pad(state.next++), col: colId, title: v, prio: prio.value, local: local.value.trim(), created: todayIso });
+      } else {
+        task.title = v; task.prio = prio.value; task.local = local.value.trim();
+      }
+      ui.adding = null; ui.editing = null; save(); render();
+    } }, [
+      h("label", { for: title.id }, ["Tarefa", title]),
+      h("label", { for: prio.id }, ["Prioridade", prio]),
+      h("label", { for: local.id }, ["Local", local]),
+      h("div", { class: "actions" }, [
+        h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { ui.adding = null; ui.editing = null; render(); } }),
+        h("button", { class: "btn primary", type: "submit", text: isNew ? "Adicionar" : "Salvar" })
+      ])
+    ]);
+    setTimeout(function () { title.focus(); }, 0);
+    return form;
+  }
+
+  function cardFor(task) {
+    if (ui.editing === task.id) return formFor(task, task.col);
+    var days = daysOpen(task.created);
+    var meta = [];
+    if (task.local) meta.push(h("span", { text: task.local }));
+    meta.push(h("span", { text: "Criada em " + fmtDate(task.created) }));
+    meta.push(h("span", { class: days > OLD_DAYS ? "old" : "", text: daysLabel(days) }));
+    var sel = h("select", { "aria-label": "Mover " + task.id + " para", onchange: function (e) { moveTo(task.id, e.target.value, null); } },
+      [h("option", { value: "", text: "Mover para…" })].concat(state.cols.filter(function (c) { return c.id !== task.col; }).map(function (c) { return h("option", { value: c.id, text: colLabel(c) }); })));
+    var card = h("article", { class: "card p-" + task.prio, draggable: "true", "data-id": task.id }, [
+      h("div", { class: "card-top" }, [h("span", { class: "os", text: task.id }), h("span", { class: "pill " + task.prio, text: PRIO[task.prio] })]),
+      h("h3", { class: days > OLD_DAYS ? "old" : "", text: task.title }),
+      meta.length ? h("div", { class: "meta" }, meta) : null,
+      photosRow(task),
+      h("div", { class: "card-foot" }, [
+        h("button", { class: "ok-btn", type: "button", text: "✓ OK", title: "Marcar como realizada", onclick: function () { task.done = true; task.doneAt = todayIso; save(); render(); } }),
+        sel,
+        h("span", null, [
+          photoBtn(task),
+          h("button", { class: "icon-btn", type: "button", text: "Editar", onclick: function () { ui.editing = task.id; ui.adding = null; render(); } }),
+          h("button", { class: "icon-btn del", type: "button", text: "Excluir", onclick: function () { removeTask(task.id); } })
+        ])
+      ])
+    ]);
+    card.addEventListener("dragstart", function (e) {
+      e.dataTransfer.setData("text/plain", task.id); e.dataTransfer.effectAllowed = "move";
+      card.classList.add("dragging");
+    });
+    card.addEventListener("dragend", function () { card.classList.remove("dragging"); clearDrop(); });
+    return card;
+  }
+
+  function moveTo(id, colId, beforeId) {
+    var task = state.tasks.filter(function (t) { return t.id === id; })[0];
+    if (!task || id === beforeId) return;
+    state.tasks = state.tasks.filter(function (t) { return t.id !== id; });
+    task.col = colId;
+    var idx = -1;
+    if (beforeId) idx = state.tasks.map(function (t) { return t.id; }).indexOf(beforeId);
+    if (idx >= 0) state.tasks.splice(idx, 0, task); else state.tasks.push(task);
+    save(); render();
+  }
+
+  var dropLine = h("div", { class: "drop-line" });
+  function clearDrop() {
+    if (dropLine.parentNode) dropLine.parentNode.removeChild(dropLine);
+    Array.prototype.forEach.call(document.querySelectorAll(".col.over"), function (c) { c.classList.remove("over"); });
+  }
+  function afterEl(list, y) {
+    var cards = Array.prototype.slice.call(list.querySelectorAll(".card:not(.dragging)"));
+    var found = null;
+    for (var i = 0; i < cards.length; i++) {
+      var r = cards[i].getBoundingClientRect();
+      if (y < r.top + r.height / 2) { found = cards[i]; break; }
+    }
+    return found;
+  }
+
+  function colFor(c) {
+    var all = state.tasks.filter(function (t) { return t.col === c.id && !t.done; });
+    var tasks = all.filter(matches);
+    var list = h("div", { class: "list", "data-col": c.id }, tasks.length ? tasks.map(cardFor) : [h("div", { class: "empty", text: ui.filter ? "Nenhuma tarefa com este filtro" : "Nenhuma tarefa nesta coluna" })]);
+    var col = h("section", { class: "col", "aria-label": c.name + ", " + SHIFTS.filter(function (s) { return s.id === c.shift; })[0].name }, [
+      h("div", { class: "col-head" }, [h("h2", { text: c.name }), h("span", { class: "count", text: ui.filter ? tasks.length + " de " + all.length : tasks.length + (tasks.length === 1 ? " tarefa" : " tarefas") })]),
+      list,
+      ui.adding === c.id ? formFor(null, c.id) : h("button", { class: "add-btn", type: "button", text: "+ Adicionar tarefa", onclick: function () { ui.adding = c.id; ui.editing = null; render(); } })
+    ]);
+    col.addEventListener("dragover", function (e) {
+      e.preventDefault(); e.dataTransfer.dropEffect = "move";
+      col.classList.add("over");
+      var after = afterEl(list, e.clientY);
+      var empty = list.querySelector(".empty"); if (empty) empty.hidden = true;
+      if (after) list.insertBefore(dropLine, after); else list.appendChild(dropLine);
+    });
+    col.addEventListener("dragleave", function (e) { if (!col.contains(e.relatedTarget)) { col.classList.remove("over"); if (dropLine.parentNode === list) list.removeChild(dropLine); var em = list.querySelector(".empty"); if (em) em.hidden = false; } });
+    col.addEventListener("drop", function (e) {
+      e.preventDefault();
+      var id = e.dataTransfer.getData("text/plain");
+      var after = afterEl(list, e.clientY);
+      clearDrop();
+      moveTo(id, c.id, after ? after.getAttribute("data-id") : null);
+    });
+    return col;
+  }
+
+  function render() {
+    var board = document.getElementById("board");
+    board.textContent = "";
+    SHIFTS.forEach(function (s) {
+      var cols = state.cols.filter(function (c) {
+        return c.shift === s.id && (!ui.filter || state.tasks.some(function (t) { return t.col === c.id && matches(t); }));
+      });
+      if (!cols.length) return;
+      board.appendChild(h("div", { class: "shift", style: "--n:" + cols.length }, [
+        h("div", { class: "shift-head", text: s.name }),
+        h("div", { class: "cols" }, cols.map(colFor))
+      ]));
+    });
+    if (ui.filter && !board.children.length) board.appendChild(h("p", { class: "hint", text: "Nenhuma tarefa com este filtro." }));
+    var openTasks = state.tasks.filter(function (t) { return !t.done; });
+    var doneCount = state.tasks.length - openTasks.length;
+    var total = openTasks.length;
+    var alta = openTasks.filter(function (t) { return t.prio === "alta"; }).length;
+    var late = openTasks.filter(function (t) { return daysOpen(t.created) > OLD_DAYS; }).length;
+    var st = document.getElementById("stats"); st.textContent = "";
+    [
+      { f: null, n: total, label: "tarefas", full: "todas as tarefas em aberto", cls: "stat" },
+      { f: "alta", n: alta, label: "alta", full: "tarefas de prioridade alta", cls: "stat" },
+      { f: "old", n: late, label: "+" + OLD_DAYS + " dias", full: "tarefas abertas há mais de " + OLD_DAYS + " dias", cls: "stat old" }
+    ].forEach(function (s) {
+      st.appendChild(h("button", { class: s.cls, type: "button", title: s.n + " " + s.full, "aria-label": s.n + " " + s.full, "aria-pressed": (ui.view === "quadro" && ui.filter === s.f) ? "true" : "false",
+        onclick: function () {
+          var was = ui.view; ui.view = "quadro";
+          if (was !== "quadro") { ui.filter = s.f; render(); } else if (s.f) setFilter(s.f); else { ui.filter = null; render(); }
+        } }, [h("b", { text: String(s.n) }), s.label]));
+    });
+    var dashIcon = h("span", { class: "stat-ic", "aria-hidden": "true" });
+    dashIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>';
+    st.appendChild(h("button", { class: "stat dash", type: "button", title: "Abrir dashboards", "aria-label": "Abrir dashboards", "aria-pressed": ui.view === "dashboards" ? "true" : "false",
+      onclick: function () { ui.view = "dashboards"; render(); } }, [dashIcon, h("span", { class: "stat-txt", text: "Dashboards" })]));
+    var calIcon = h("span", { class: "stat-ic", "aria-hidden": "true" });
+    calIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+    st.appendChild(h("button", { class: "stat cal", type: "button", title: "Abrir calendário", "aria-label": "Abrir calendário", "aria-pressed": ui.view === "calendario" ? "true" : "false",
+      onclick: function () { ui.view = "calendario"; render(); } }, [calIcon, h("span", { class: "stat-txt", text: "Calendário" })]));
+    document.getElementById("notice").hidden = !state.example || state.hideNotice;
+    var v = ui.view;
+    board.hidden = v !== "quadro";
+    document.getElementById("hint").hidden = v !== "quadro";
+    document.getElementById("done").hidden = v !== "realizadas";
+    document.getElementById("dash").hidden = v !== "dashboards";
+    document.getElementById("cal").hidden = v !== "calendario";
+    renderTabs(openTasks.length, doneCount);
+    if (v === "realizadas") renderDone();
+    if (v === "dashboards") renderDash();
+    if (v === "calendario") renderCal();
+    renderWModal();
+    renderSettings();
+    updateWhats();
+    renderDatabox();
+    renderSheet();
+    renderChrome();
+  }
+
+  function say(msg) { document.getElementById("status").textContent = msg; }
+  function csvCell(v) {
+    var s = String(v == null ? "" : v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function buildCsv() {
+    var rows = [["Categoria", "Turno", "Situação", "Tarefa", "Local", "Prioridade", "Criada em", "Dias em aberto", "Realizada em"]];
+    SHIFTS.forEach(function (s) {
+      state.cols.filter(function (c) { return c.shift === s.id; }).forEach(function (c) {
+        var ts = state.tasks.filter(function (t) { return t.col === c.id; });
+        ts.filter(function (t) { return !t.done; }).concat(ts.filter(function (t) { return t.done; })).forEach(function (t) {
+          rows.push([c.name, s.name, t.done ? "Realizada" : "Em aberto", t.title, t.local || "", PRIO[t.prio] || t.prio,
+            fmtDate(t.created), t.done ? "" : daysOpen(t.created), t.done ? fmtDate(t.doneAt || todayIso) : ""]);
+        });
+      });
+    });
+    rows.push([]);
+    rows.push(["Programação", "Início", "Fim", "Horário", "Tipo", "Observação"]);
+    state.events.slice().sort(function (a, b) { return a.start.localeCompare(b.start); }).forEach(function (e) {
+      rows.push([e.title, fmtDate(e.start), fmtDate(e.end || e.start), e.time || "", CATS[e.cat] || e.cat, e.note || ""]);
+    });
+    return "﻿" + rows.map(function (r) { return r.map(csvCell).join(";"); }).join("\r\n");
+  }
+  function buildBackup() {
+    return JSON.stringify({ app: "programacao-manutencao", version: VERSION, exportedAt: new Date().toISOString(), next: state.next, cols: state.cols, tasks: state.tasks, events: state.events }, null, 2);
+  }
+  function showText(filename, text) {
+    ui.databox = { mode: "text", filename: filename, text: text };
+    say("O download não está disponível aqui. Copie o texto abaixo e cole em um arquivo.");
+    render();
+  }
+  function browserDownload(filename, text) {
+    try {
+      var type = /\.json$/.test(filename) ? "application/json" : "text/csv";
+      var url = URL.createObjectURL(new Blob([text], { type: type + ";charset=utf-8" }));
+      var a = document.createElement("a"); a.href = url; a.download = filename; a.style.display = "none";
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+      return true;
+    } catch (e) { return false; }
+  }
+  function saveFile(filename, text) {
+    var cl = window.claude;
+    var p = (cl && cl.use) ? cl.use("downloads") : Promise.resolve(null);
+    return Promise.resolve(p).catch(function () { return null; }).then(function (dl) {
+      if (!dl) { if (!browserDownload(filename, text)) showText(filename, text); else say("Arquivo gerado: " + filename); return; }
+      return dl.save({ filename: filename, data: text }).then(
+        function () { say("Download confirmado: " + filename); },
+        function (e) { if (e && e.code === "declined") say("Download cancelado."); else showText(filename, text); }
+      );
+    });
+  }
+  function validDate(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+  function normalizeBackup(o) {
+    if (!o || typeof o !== "object" || !Array.isArray(o.cols) || !Array.isArray(o.tasks)) return null;
+    var shiftIds = SHIFTS.map(function (s) { return s.id; });
+    var cols = [], seen = {};
+    o.cols.forEach(function (c) {
+      if (c && typeof c.id === "string" && c.id && typeof c.name === "string" && c.name.trim() && shiftIds.indexOf(c.shift) >= 0 && !seen[c.id]) {
+        seen[c.id] = true; cols.push({ id: c.id.slice(0, 40), name: c.name.trim().slice(0, 40), shift: c.shift });
+      }
+    });
+    if (!cols.length) return null;
+    var max = 0, tasks = [], used = {};
+    o.tasks.forEach(function (t) {
+      if (!t || !seen[t.col] || typeof t.title !== "string" || !t.title.trim()) return;
+      var id = typeof t.id === "string" && t.id && !used[t.id] ? t.id.slice(0, 20) : null;
+      if (id) { used[id] = true; var m = /^OS-(\d+)$/.exec(id); if (m) max = Math.max(max, +m[1]); }
+      tasks.push({ id: id, col: t.col, title: t.title.trim().slice(0, 120), prio: PRIO[t.prio] ? t.prio : "media",
+        local: typeof t.local === "string" ? t.local.slice(0, 60) : "", created: validDate(t.created) ? t.created : todayIso,
+        done: t.done === true, doneAt: t.done === true ? (validDate(t.doneAt) ? t.doneAt : todayIso) : undefined });
+    });
+    var next = Math.max(Number(o.next) || 1, max + 1);
+    tasks.forEach(function (t) { if (!t.id) t.id = "OS-" + pad(next++); if (!t.done) delete t.doneAt; });
+    var events = null;
+    if (Array.isArray(o.events)) {
+      events = []; var eu = {};
+      o.events.forEach(function (e) {
+        if (!e || typeof e.title !== "string" || !e.title.trim() || !validDate(e.start)) return;
+        var en = validDate(e.end) && e.end >= e.start ? e.end : e.start;
+        var id = typeof e.id === "string" && /^EV-\d+$/.test(e.id) && !eu[e.id] ? e.id : null; if (id) eu[id] = true;
+        events.push({ id: id, title: e.title.trim().slice(0, 120), start: e.start, end: en, time: typeof e.time === "string" && /^\d{2}:\d{2}$/.test(e.time) ? e.time : "",
+          cat: CATS[e.cat] ? e.cat : "outros", note: typeof e.note === "string" ? e.note.slice(0, 120) : "" });
+      });
+      var mx = 0; events.forEach(function (e) { if (e.id) mx = Math.max(mx, +e.id.slice(3)); });
+      events.forEach(function (e) { if (!e.id) e.id = "EV-" + (++mx); });
+    }
+    return { cols: cols, tasks: tasks, next: next, events: events };
+  }
+  function readImport(file) {
+    var reader = new FileReader();
+    reader.onerror = function () { say("Não foi possível ler o arquivo."); };
+    reader.onload = function () {
+      var data = null;
+      try { data = normalizeBackup(JSON.parse(String(reader.result))); } catch (e) { data = null; }
+      if (!data) { say("Esse arquivo não é um backup válido. Use um arquivo gerado por Exportar dados."); return; }
+      ui.databox = { mode: "import", name: file.name, data: data };
+      say(""); render();
+    };
+    reader.readAsText(file);
+  }
+  function applyImport(d) {
+    state.cols = d.cols; state.tasks = d.tasks; state.next = d.next; if (d.events) { state.events = d.events; state.evSeed = "1.4"; ui.cal.form = null; } state.example = false; state.hideNotice = true;
+    ui.databox = null; ui.adding = null; ui.editing = null; ui.removing = null; ui.filter = null;
+    save(); render();
+    say("Dados importados: " + d.cols.length + " categorias e " + d.tasks.length + " tarefas.");
+  }
+  function renderDatabox() {
+    var box = document.getElementById("databox"), d = ui.databox;
+    box.textContent = ""; box.hidden = !d;
+    if (!d) return;
+    if (!d.shown) { d.shown = true; setTimeout(function () { try { box.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {} }, 0); }
+    if (d.mode === "import") {
+      var n = d.data.tasks.length, nd = d.data.tasks.filter(function (t) { return t.done; }).length;
+      box.appendChild(h("h2", { text: "Importar dados" }));
+      box.appendChild(h("p", { text: "O arquivo " + d.name + " traz " + d.data.cols.length + " categorias e " + n + " tarefas (" + (n - nd) + " em aberto e " + nd + " realizadas). Importar substitui tudo o que está no quadro agora." }));
+      box.appendChild(h("div", { class: "actions" }, [
+        h("button", { class: "btn primary", type: "button", text: "Substituir dados", onclick: function () { applyImport(d.data); } }),
+        h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { ui.databox = null; render(); } })
+      ]));
+    } else {
+      var ta = h("textarea", { id: "backup-text", readonly: "readonly", "aria-label": "Conteúdo de " + d.filename });
+      ta.value = d.text;
+      box.appendChild(h("h2", { text: d.filename }));
+      box.appendChild(h("p", { text: "Copie o texto e cole em um arquivo com este nome." }));
+      box.appendChild(ta);
+      box.appendChild(h("div", { class: "actions" }, [
+        h("button", { class: "btn primary", type: "button", text: "Copiar texto", onclick: function () {
+          function sel() { ta.focus(); ta.select(); say("Texto selecionado. Use copiar do teclado."); }
+          try { navigator.clipboard.writeText(d.text).then(function () { say("Texto copiado."); }, sel); } catch (e) { sel(); }
+        } }),
+        h("button", { class: "btn", type: "button", text: "Fechar", onclick: function () { ui.databox = null; say(""); render(); } })
+      ]));
+    }
+  }
+
+  function isoToDay(s) { var p = s.split("-"); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000); }
+  function dayToIso(n) { return new Date(n * 86400000).toISOString().slice(0, 10); }
+  function refDay(t) { return isoToDay(t.done ? (t.doneAt || t.created) : t.created); }
+  function dashDomain() {
+    var max = isoToDay(todayIso), min = max - 29;
+    state.tasks.forEach(function (t) { var d = refDay(t); if (d < min) min = d; });
+    return { min: min, max: max };
+  }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+
+  function renderDash() {
+    var box = document.getElementById("dash"); box.textContent = "";
+    var dm = dashDomain(), N = Math.max(1, dm.max - dm.min);
+    var cur = { from: ui.dash.from == null ? dm.min : ui.dash.from, to: ui.dash.to == null ? dm.max : ui.dash.to };
+    cur.from = Math.max(dm.min, Math.min(cur.from, dm.max)); cur.to = Math.max(dm.min, Math.min(cur.to, dm.max));
+    if (cur.from > cur.to) cur.from = cur.to;
+    function pct(day) { return ((day - dm.min) / N * 100) + "%"; }
+
+    var statusSeg = h("div", { class: "seg-ctl", role: "group", "aria-label": "Situação das tarefas" },
+      [["todas", "Todas"], ["pendentes", "Pendentes"], ["realizadas", "Realizadas"]].map(function (x) {
+        return h("button", { type: "button", text: x[1], "aria-pressed": ui.dash.status === x[0] ? "true" : "false", onclick: function () { ui.dash.status = x[0]; render(); } });
+      }));
+    var presetBtns = [];
+    var presets = h("div", { class: "presets", role: "group", "aria-label": "Atalhos de período" },
+      [["7 dias", Math.max(dm.min, dm.max - 6)], ["30 dias", Math.max(dm.min, dm.max - 29)], ["Tudo", dm.min]].map(function (p) {
+        var b = h("button", { type: "button", text: p[0], onclick: function () { apply("to", dm.max, false); apply("from", p[1], false); } });
+        presetBtns.push({ el: b, from: p[1] });
+        return b;
+      }));
+
+    var track = h("div", { class: "r-track" });
+    var fill = h("div", { class: "r-range" });
+    var ruler = h("div", { class: "ruler" }, [track, fill]);
+    var tickStep = N <= 62 ? 1 : 7;
+    for (var d = 0; d <= N; d += tickStep) ruler.appendChild(h("div", { class: "r-tick", style: "left:" + (d / N * 100) + "%" }));
+    for (var i = 0; i <= 4; i++) {
+      ruler.appendChild(h("div", { class: "r-lab", style: "left:" + (i / 4 * 100) + "%", text: fmtShort(dayToIso(Math.round(dm.min + N * i / 4))) }));
+    }
+    var handles = {};
+    ["from", "to"].forEach(function (which) {
+      var hd = h("button", { class: "r-handle", type: "button", role: "slider", "aria-label": which === "from" ? "Início do período" : "Fim do período", "aria-valuemin": "0", "aria-valuemax": String(N) },
+        [h("span", { class: "r-bubble " + which })]);
+      hd.addEventListener("keydown", function (e) {
+        var step = e.shiftKey ? 7 : 1, v = cur[which], nv = null;
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") nv = v - step;
+        else if (e.key === "ArrowRight" || e.key === "ArrowUp") nv = v + step;
+        else if (e.key === "Home") nv = dm.min;
+        else if (e.key === "End") nv = dm.max;
+        if (nv !== null) { e.preventDefault(); apply(which, nv, false); }
+      });
+      handles[which] = hd; ruler.appendChild(hd);
+    });
+    var read = h("div", { class: "r-read" });
+    var note = h("div", { class: "r-note", text: "Pendentes contam pela data de criação e realizadas pela data de realização." });
+    var chartBox = h("div", { class: "dash-card" });
+
+    function paint() {
+      fill.style.left = pct(cur.from); fill.style.width = ((cur.to - cur.from) / N * 100) + "%";
+      ["from", "to"].forEach(function (w) {
+        var hd = handles[w], day = cur[w];
+        hd.style.left = pct(day);
+        hd.setAttribute("aria-valuenow", String(day - dm.min));
+        hd.setAttribute("aria-valuetext", fmtDate(dayToIso(day)));
+        hd.firstChild.textContent = fmtShort(dayToIso(day));
+      });
+      read.textContent = "Período: " + fmtDate(dayToIso(cur.from)) + " a " + fmtDate(dayToIso(cur.to)) + " · " + plural(cur.to - cur.from + 1, "dia", "dias");
+      presetBtns.forEach(function (p) { p.el.setAttribute("aria-pressed", cur.from === p.from && cur.to === dm.max ? "true" : "false"); });
+    }
+    function apply(which, day, swap) {
+      day = Math.max(dm.min, Math.min(dm.max, day));
+      if (swap && cur.from === cur.to) {
+        if (which === "from" && day > cur.to) which = "to";
+        else if (which === "to" && day < cur.from) which = "from";
+      }
+      if (which === "from") cur.from = Math.min(day, cur.to); else cur.to = Math.max(day, cur.from);
+      ui.dash.from = cur.from; ui.dash.to = cur.to;
+      paint(); renderChart();
+      return which;
+    }
+    function dayFromX(x) {
+      var r = track.getBoundingClientRect();
+      var f = r.width ? Math.max(0, Math.min(1, (x - r.left) / r.width)) : 0;
+      return Math.round(dm.min + f * N);
+    }
+    var dragging = null;
+    function onMove(e) { if (dragging) dragging = apply(dragging, dayFromX(e.clientX), true); }
+    function onUp() {
+      dragging = null;
+      window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); window.removeEventListener("pointercancel", onUp);
+    }
+    ruler.addEventListener("pointerdown", function (e) {
+      var hd = e.target.closest ? e.target.closest(".r-handle") : null, which, day = dayFromX(e.clientX);
+      if (hd) which = hd === handles.from ? "from" : "to";
+      else {
+        which = day < cur.from ? "from" : day > cur.to ? "to" : (Math.abs(day - cur.from) <= Math.abs(day - cur.to) ? "from" : "to");
+        which = apply(which, day, false);
+      }
+      dragging = which; e.preventDefault();
+      try { handles[which].focus({ preventScroll: true }); } catch (err) {}
+      window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp); window.addEventListener("pointercancel", onUp);
+    });
+
+    function renderChart() {
+      chartBox.textContent = "";
+      var stt = ui.dash.status, rows = [], max = 0;
+      SHIFTS.forEach(function (s) {
+        state.cols.filter(function (c) { return c.shift === s.id; }).forEach(function (c) {
+          var pend = 0, real = 0;
+          state.tasks.forEach(function (x) {
+            if (x.col !== c.id) return;
+            var dd = refDay(x); if (dd < cur.from || dd > cur.to) return;
+            if (x.done) real++; else pend++;
+          });
+          if (stt === "pendentes") real = 0;
+          if (stt === "realizadas") pend = 0;
+          rows.push({ name: c.name, shift: s.name.toLowerCase(), pend: pend, real: real });
+          max = Math.max(max, pend + real);
+        });
+      });
+      var tip = h("div", { class: "tip", hidden: "hidden" });
+      function showTip(e, row, kind, n) {
+        tip.textContent = "";
+        tip.appendChild(h("b", { text: String(n) }));
+        tip.appendChild(document.createTextNode(kind === "real" ? (n === 1 ? "realizada" : "realizadas") : (n === 1 ? "pendente" : "pendentes")));
+        tip.appendChild(h("br"));
+        tip.appendChild(h("span", { text: row.name + " · " + row.shift }));
+        tip.hidden = false;
+        var x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+        tip.style.left = Math.max(8, x) + "px"; tip.style.top = (e.clientY + 14) + "px";
+      }
+      var labelText = { todas: "Pendentes e realizadas", pendentes: "Pendentes", realizadas: "Realizadas" }[stt];
+      chartBox.appendChild(h("div", { class: "dash-head" }, [
+        h("h2", { text: "Tarefas por categoria" }),
+        h("span", { class: "dash-sub", text: labelText + " · " + fmtShort(dayToIso(cur.from)) + " a " + fmtShort(dayToIso(cur.to)) })
+      ]));
+      if (stt === "todas") {
+        chartBox.appendChild(h("div", { class: "legend" }, [
+          h("span", { class: "key" }, [h("span", { class: "sw real" }), "Realizadas"]),
+          h("span", { class: "key" }, [h("span", { class: "sw pend" }), "Pendentes"])
+        ]));
+      }
+      if (!max) {
+        chartBox.appendChild(h("div", { class: "dash-empty", text: "Nenhuma tarefa neste período e situação. Amplie a régua de tempo ou troque o filtro." }));
+      } else {
+        var list = h("div", { role: "list", "aria-label": "Tarefas por categoria" });
+        rows.forEach(function (row) {
+          var total = row.pend + row.real, segs = [];
+          function mk(kind, n) {
+            var sg = h("div", { class: "seg " + kind, style: "flex:" + n + " 1 0" });
+            sg.addEventListener("pointermove", function (e) { showTip(e, row, kind, n); });
+            sg.addEventListener("pointerleave", function () { tip.hidden = true; });
+            return sg;
+          }
+          if (row.real) segs.push(mk("real", row.real));
+          if (row.pend) segs.push(mk("pend", row.pend));
+          var val = stt === "todas" ? row.pend + " pend. · " + row.real + " real."
+            : stt === "pendentes" ? plural(row.pend, "pendente", "pendentes") : plural(row.real, "realizada", "realizadas");
+          list.appendChild(h("div", { class: "bar-row", role: "listitem", "aria-label": row.name + ", " + row.shift + ": " + val }, [
+            h("div", { class: "bar-label" }, [h("span", { class: "bl-name", text: row.name }), h("span", { class: "bl-sub", text: row.shift })]),
+            h("div", { class: "bar-area" }, [h("div", { class: "bar", style: "width:" + (total / max * 100) + "%" }, segs)]),
+            h("div", { class: "bar-val", text: val })
+          ]));
+        });
+        chartBox.appendChild(list);
+      }
+      var th = ["Categoria", "Turno", "Pendentes", "Realizadas", "Total"];
+      var table = h("table", null, [
+        h("thead", null, [h("tr", null, th.map(function (t, i) { return h("th", { class: i > 1 ? "n" : "", text: t }); }))]),
+        h("tbody", null, rows.map(function (row) {
+          return h("tr", null, [h("td", { text: row.name }), h("td", { text: row.shift }),
+            h("td", { class: "n", text: String(row.pend) }), h("td", { class: "n", text: String(row.real) }), h("td", { class: "n", text: String(row.pend + row.real) })]);
+        }))
+      ]);
+      chartBox.appendChild(h("details", null, [h("summary", { text: "Ver como tabela" }), h("div", { class: "tbl-wrap" }, [table])]));
+      chartBox.appendChild(tip);
+    }
+
+    box.appendChild(h("div", { class: "dash-filters" }, [statusSeg, presets]));
+    box.appendChild(h("div", { class: "ruler-wrap" }, [ruler, read, note]));
+    box.appendChild(chartBox);
+    paint(); renderChart();
+  }
+
+  var CATS = { limpeza: "Limpeza", visita: "Visita técnica", outros: "Outros" };
+  function monthTitle(ym) {
+    var p = ym.split("-"), t = new Date(+p[0], +p[1] - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  function shiftMonth(n) { var p = ui.cal.month.split("-"), d = new Date(+p[0], +p[1] - 1 + n, 1); ui.cal.month = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+  function evOn(iso) {
+    return state.events.filter(function (e) { return e.start <= iso && iso <= (e.end || e.start); })
+      .sort(function (a, b) { return (a.start + (a.time || "")).localeCompare(b.start + (b.time || "")); });
+  }
+  function openEv(e, start) { ui.cal.form = e ? { id: e.id } : { id: null, start: start }; render(); }
+  function evForm() {
+    var f = ui.cal.form, ev = f.id ? state.events.filter(function (e) { return e.id === f.id; })[0] : null;
+    if (f.id && !ev) { ui.cal.form = null; return null; }
+    var t = ev || { title: "", start: f.start, end: f.start, time: "", cat: "outros", note: "" };
+    var title = h("input", { id: "ev-t", type: "text", required: "required", maxlength: "120", value: t.title });
+    var start = h("input", { id: "ev-s", type: "date", required: "required", value: t.start });
+    var end = h("input", { id: "ev-e", type: "date", value: t.end || t.start });
+    var time = h("input", { id: "ev-h", type: "time", value: t.time || "" });
+    var cat = h("select", { id: "ev-c" }, Object.keys(CATS).map(function (k) { return h("option", { value: k, text: CATS[k], selected: k === t.cat ? "selected" : false }); }));
+    var note = h("input", { id: "ev-n", type: "text", maxlength: "120", value: t.note || "" });
+    var actions = [];
+    if (ev) actions.push(h("button", { class: "btn danger", type: "button", text: "Excluir", onclick: function () { state.events = state.events.filter(function (x) { return x.id !== ev.id; }); ui.cal.form = null; save(); render(); } }));
+    actions.push(h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { ui.cal.form = null; render(); } }));
+    actions.push(h("button", { class: "btn primary", type: "submit", text: ev ? "Salvar" : "Adicionar" }));
+    var form = h("form", { class: "edit ev-form", onsubmit: function (e) {
+      e.preventDefault();
+      var v = title.value.trim(); if (!v || !validDate(start.value)) return;
+      var en = validDate(end.value) && end.value >= start.value ? end.value : start.value;
+      var d = { title: v, start: start.value, end: en, time: time.value || "", cat: CATS[cat.value] ? cat.value : "outros", note: note.value.trim() };
+      if (ev) { ev.title = d.title; ev.start = d.start; ev.end = d.end; ev.time = d.time; ev.cat = d.cat; ev.note = d.note; }
+      else { d.id = evNextId(); state.events.push(d); }
+      if (/^\d{4}-\d{2}$/.test(d.start.slice(0, 7))) ui.cal.month = d.start.slice(0, 7);
+      ui.cal.form = null; save(); render();
+    } }, [
+      h("label", { for: title.id }, ["Programação", title]),
+      h("div", { class: "row3" }, [h("label", { for: start.id }, ["Início", start]), h("label", { for: end.id }, ["Fim", end]), h("label", { for: time.id }, ["Horário (opcional)", time])]),
+      h("div", { class: "row" }, [h("label", { for: cat.id }, ["Tipo", cat]), h("label", { for: note.id }, ["Observação (opcional)", note])]),
+      h("div", { class: "actions" }, actions)
+    ]);
+    setTimeout(function () { try { title.focus(); title.scrollIntoView({ block: "nearest" }); } catch (e) {} }, 0);
+    return form;
+  }
+  function renderCal() {
+    var box = document.getElementById("cal"); box.textContent = "";
+    var p = ui.cal.month.split("-"), y = +p[0], m = +p[1] - 1;
+    box.appendChild(h("div", { class: "cal-head" }, [
+      h("button", { class: "btn", type: "button", "aria-label": "Mês anterior", text: "‹", onclick: function () { shiftMonth(-1); render(); } }),
+      h("h2", { text: monthTitle(ui.cal.month), "aria-live": "polite" }),
+      h("button", { class: "btn", type: "button", "aria-label": "Próximo mês", text: "›", onclick: function () { shiftMonth(1); render(); } }),
+      h("button", { class: "btn", type: "button", text: "Hoje", onclick: function () { ui.cal.month = todayIso.slice(0, 7); render(); } }),
+      h("span", { class: "grow" }),
+      h("button", { class: "btn primary", type: "button", text: "+ Nova programação", onclick: function () { openEv(null, ui.cal.month === todayIso.slice(0, 7) ? todayIso : ui.cal.month + "-01"); } })
+    ]));
+    if (ui.cal.form) { var fm = evForm(); if (fm) box.appendChild(fm); }
+    var grid = h("div", { class: "cal-grid" });
+    ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].forEach(function (d) { grid.appendChild(h("div", { class: "cal-wd", text: d })); });
+    var first = new Date(y, m, 1).getDay(), n = new Date(y, m + 1, 0).getDate();
+    for (var i = 0; i < first; i++) grid.appendChild(h("div", { class: "day blank", "aria-hidden": "true" }));
+    for (var d = 1; d <= n; d++) (function (d) {
+      var iso = ui.cal.month + "-" + String(d).padStart(2, "0"), list = evOn(iso);
+      var cell = h("div", { class: "day" + (iso === todayIso ? " today" : ""), onclick: function () { openEv(null, iso); } }, [
+        h("button", { class: "dn", type: "button", text: String(d), "aria-label": "Adicionar programação em " + fmtDate(iso), onclick: function (e) { e.stopPropagation(); openEv(null, iso); } })
+      ]);
+      list.slice(0, 3).forEach(function (e) {
+        cell.appendChild(h("button", { class: "chip cat-" + e.cat + (e.start !== iso ? " cont" : ""), type: "button", title: e.title + " · " + fmtRange(e) + (e.time ? " às " + e.time : ""),
+          text: (e.time && e.start === iso ? e.time + " " : "") + e.title, onclick: function (ev) { ev.stopPropagation(); openEv(e); } }));
+      });
+      if (list.length > 3) cell.appendChild(h("span", { class: "more", text: "+" + (list.length - 3) + " mais" }));
+      grid.appendChild(cell);
+    })(d);
+    box.appendChild(grid);
+    box.appendChild(h("div", { class: "cal-legend" }, Object.keys(CATS).map(function (k) { return h("span", null, [h("span", { class: "dot cat-" + k }), CATS[k]]); })));
+    function row(e) {
+      return h("div", { class: "ev-row" }, [
+        h("div", { class: "ev-main" }, [
+          h("div", { class: "ev-title" }, [h("span", { class: "dot cat-" + e.cat }), e.title]),
+          h("div", { class: "ev-meta", text: fmtRange(e) + (e.time ? " às " + e.time : "") + " · " + CATS[e.cat] + (e.note ? " · " + e.note : "") })
+        ]),
+        h("div", { class: "card-foot", style: "border:none;padding:0" }, [
+          h("button", { class: "icon-btn", type: "button", text: "Editar", onclick: function () { openEv(e); } }),
+          h("button", { class: "icon-btn del", type: "button", text: "Excluir", onclick: function () { state.events = state.events.filter(function (x) { return x.id !== e.id; }); if (ui.cal.form && ui.cal.form.id === e.id) ui.cal.form = null; save(); render(); } })
+        ])
+      ]);
+    }
+    var up = upcoming(), past = state.events.filter(function (e) { return (e.end || e.start) < todayIso; }).sort(function (a, b) { return b.start.localeCompare(a.start); });
+    var lst = h("div", { class: "ev-list" }, [h("h3", { text: "Próximas programações · " + up.length })]);
+    if (!up.length) lst.appendChild(h("p", { class: "hint", text: "Nenhuma programação futura. Clique em um dia do calendário para adicionar." }));
+    up.forEach(function (e) { lst.appendChild(row(e)); });
+    if (past.length) lst.appendChild(h("details", null, [h("summary", { text: "Programações passadas (" + past.length + ")" })].concat(past.map(row))));
+    box.appendChild(lst);
+  }
+
+  function renderTabs(o, d) {
+    var nav = document.getElementById("tabs"); nav.textContent = "";
+    [{ v: "quadro", label: "Quadro · " + o }, { v: "realizadas", label: "Realizadas · " + d }, { v: "dashboards", label: "Dashboards" }, { v: "calendario", label: "Calendário" }].forEach(function (x) {
+      nav.appendChild(h("button", { class: "tab", type: "button", "aria-current": ui.view === x.v ? "page" : false, text: x.label,
+        onclick: function () { ui.view = x.v; render(); } }));
+    });
+  }
+  function renderDone() {
+    var box = document.getElementById("done"); box.textContent = "";
+    var any = false;
+    SHIFTS.forEach(function (s) {
+      state.cols.filter(function (c) { return c.shift === s.id; }).forEach(function (c) {
+        var ts = state.tasks.filter(function (t) { return t.col === c.id && t.done; });
+        if (!ts.length) return;
+        any = true;
+        ts.sort(function (a, b) { return (b.doneAt || "").localeCompare(a.doneAt || ""); });
+        box.appendChild(h("section", { class: "done-group" }, [
+          h("h2", { text: c.name + " · " + s.name.toLowerCase() }),
+          h("div", null, ts.map(function (t) {
+            return h("div", { class: "done-row" }, [
+              h("div", { class: "done-main" }, [
+                h("div", { class: "done-title", text: t.title }),
+                h("div", { class: "meta" }, [t.local ? h("span", { text: t.local }) : null, h("span", { text: "Realizada em " + fmtDate(t.doneAt || todayIso) })]),
+                photosRow(t)
+              ]),
+              h("span", null, [
+                h("button", { class: "icon-btn", type: "button", text: "Reabrir", onclick: function () { t.done = false; delete t.doneAt; save(); render(); } }),
+                h("button", { class: "icon-btn del", type: "button", text: "Excluir", onclick: function () { removeTask(t.id); } })
+              ])
+            ]);
+          }))
+        ]));
+      });
+    });
+    if (!any) box.appendChild(h("p", { class: "hint", text: "Nenhuma tarefa realizada ainda. Use o botão OK em um cartão do quadro." }));
+  }
+
+  function tasksMessage() {
+    var lines = [];
+    SHIFTS.forEach(function (s) {
+      state.cols.filter(function (c) { return c.shift === s.id; }).forEach(function (c) {
+        var ts = state.tasks.filter(function (t) { return t.col === c.id && !t.done; });
+        if (!ts.length) return;
+        lines.push("*" + c.name + " (" + s.name.toLowerCase() + ")*");
+        ts.forEach(function (t) { lines.push("• " + t.title + (t.local ? " — " + t.local : "")); });
+        lines.push("");
+      });
+    });
+    return lines.join("\n").replace(/\s+$/, "");
+  }
+  function upcoming() {
+    return state.events.filter(function (e) { return (e.end || e.start) >= todayIso; }).sort(function (a, b) { return (a.start + (a.time || "")).localeCompare(b.start + (b.time || "")); });
+  }
+  function fmtRange(e) { return e.end && e.end !== e.start ? fmtShort(e.start) + " a " + fmtShort(e.end) : fmtShort(e.start); }
+  function calMessage() {
+    var ev = upcoming();
+    if (!ev.length) return "";
+    return ["*Calendário de programações*"].concat(ev.map(function (e) {
+      return "• " + e.title + " — " + fmtRange(e) + (e.time ? " às " + e.time : "") + (e.note ? " (" + e.note + ")" : "");
+    })).join("\n");
+  }
+  function buildMessage(mode) {
+    mode = mode || ui.wmode;
+    var parts = [];
+    if (mode !== "calendario") { var t = tasksMessage(); if (t) parts.push(t); }
+    if (mode !== "tarefas") { var c = calMessage(); if (c) parts.push(c); }
+    if (!parts.length) return "";
+    return "*Programação de Manutenção* · " + new Date().toLocaleDateString("pt-BR") + "\n\n" + parts.join("\n\n");
+  }
+  function updateWhats() {
+    var any = !!(tasksMessage() || calMessage());
+    var b = document.getElementById("whats");
+    b.disabled = !any;
+    document.getElementById("copiar").disabled = !any;
+    if (!any) ui.wopen = false;
+  }
+  function renderWModal() {
+    var m = document.getElementById("wmodal");
+    m.textContent = ""; m.hidden = !ui.wopen;
+    if (!ui.wopen) return;
+    var nT = state.tasks.filter(function (t) { return !t.done; }).length, nC = upcoming().length;
+    var opts = [["tarefas", "Tarefas", nT + " em aberto", !nT], ["calendario", "Programação do calendário", nC + " próximas", !nC], ["ambos", "Ambos", "", !nT && !nC]];
+    if (opts.filter(function (o) { return o[0] === ui.wmode && !o[3]; }).length === 0) ui.wmode = !nT ? "calendario" : "tarefas";
+    var link = h("a", { class: "btn primary", target: "_blank", rel: "noopener", text: "Abrir WhatsApp" });
+    var info = h("span", { class: "hint" });
+    function upd() {
+      var msg = buildMessage();
+      if (msg) { link.href = "https://wa.me/?text=" + encodeURIComponent(msg); link.removeAttribute("aria-disabled"); }
+      else { link.removeAttribute("href"); link.setAttribute("aria-disabled", "true"); }
+    }
+    var box = h("div", { class: "modal-box" }, [h("h2", { text: "Enviar por WhatsApp" }), h("span", { class: "hint", text: "O que deve ir na mensagem?" })]);
+    opts.forEach(function (o) {
+      var inp = h("input", { type: "radio", name: "wm", value: o[0], checked: o[0] === ui.wmode ? "checked" : false, disabled: o[3] ? "disabled" : false,
+        onchange: function () { ui.wmode = o[0]; upd(); } });
+      box.appendChild(h("label", { class: "opt" + (o[3] ? " off" : "") }, [inp, o[1], h("small", { text: o[2] })]));
+    });
+    var copy = h("button", { class: "btn", type: "button", text: "Copiar mensagem", onclick: function () {
+      var b = this;
+      function f(t) { b.textContent = t; setTimeout(function () { b.textContent = "Copiar mensagem"; }, 2000); }
+      try { navigator.clipboard.writeText(buildMessage()).then(function () { f("Copiada"); }, function () { f("Não foi possível copiar"); }); } catch (e) { f("Não foi possível copiar"); }
+    } });
+    box.appendChild(h("div", { class: "actions" }, [h("button", { class: "btn", type: "button", text: "Fechar", onclick: function () { ui.wopen = false; render(); } }), copy, link]));
+    m.appendChild(box);
+    upd();
+    m.onclick = function (e) { if (e.target === m) { ui.wopen = false; render(); } };
+    setTimeout(function () { var c = m.querySelector("input:checked") || link; try { c.focus(); } catch (e) {} }, 0);
+  }
+
+  function shiftSelect(value, id, label) {
+    return h("select", { id: id, "aria-label": label }, SHIFTS.map(function (s) { return h("option", { value: s.id, text: s.name, selected: s.id === value ? "selected" : false }); }));
+  }
+  function removeCol(id, dest) {
+    if (dest === "__delete") state.tasks = state.tasks.filter(function (t) { return t.col !== id; });
+    else state.tasks.forEach(function (t) { if (t.col === id) t.col = dest; });
+    state.cols = state.cols.filter(function (c) { return c.id !== id; });
+    ui.removing = null; if (ui.adding === id) ui.adding = null; if (ui.editing && !state.tasks.some(function (t) { return t.id === ui.editing; })) ui.editing = null;
+    save(); render();
+  }
+  function renderSettings() {
+    var box = document.getElementById("settings");
+    var btn = document.getElementById("config");
+    btn.setAttribute("aria-expanded", ui.settings ? "true" : "false");
+    box.hidden = !ui.settings;
+    box.textContent = "";
+    if (!ui.settings) return;
+    box.appendChild(h("div", { class: "set-head" }, [
+      h("h2", { text: "Categorias" }),
+      h("button", { class: "btn", type: "button", text: "Fechar", onclick: function () { ui.settings = false; ui.removing = null; render(); } })
+    ]));
+    box.appendChild(h("p", { class: "hint", text: "Cada categoria é uma coluna do quadro. Altere o nome ou o turno e a mudança vale ao sair do campo." }));
+    var order = SHIFTS.map(function (s) { return s.id; });
+    state.cols.slice().sort(function (a, b) {
+      return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }) || order.indexOf(a.shift) - order.indexOf(b.shift);
+    }).forEach(function (c) {
+      var count =state.tasks.filter(function (t) { return t.col === c.id; }).length;
+      var name = h("input", { id: "cn-" + c.id, type: "text", value: c.name, maxlength: "40", "aria-label": "Nome da categoria", onchange: function (e) {
+        var v = e.target.value.trim(); if (v) { c.name = v; save(); } render();
+      } });
+      var shift = shiftSelect(c.shift, "cs-" + c.id, "Turno de " + c.name);
+      shift.addEventListener("change", function (e) { c.shift = e.target.value; save(); render(); });
+      var row = h("div", { class: "set-row" }, [
+        name, shift,
+        h("span", { class: "n", text: count + (count === 1 ? " tarefa" : " tarefas") }),
+        h("button", { class: "btn danger", type: "button", text: "Remover", disabled: state.cols.length < 2 ? "disabled" : false,
+          title: state.cols.length < 2 ? "O quadro precisa de ao menos uma categoria" : false,
+          onclick: function () { if (count === 0) removeCol(c.id, null); else { ui.removing = c.id; render(); } } })
+      ]);
+      if (ui.removing === c.id) {
+        var dest = h("select", { id: "dest-" + c.id, "aria-label": "Destino das tarefas" },
+          state.cols.filter(function (x) { return x.id !== c.id; }).map(function (x) { return h("option", { value: x.id, text: colLabel(x) }); })
+            .concat([h("option", { value: "__delete", text: "Excluir as " + count + " tarefas" })]));
+        row.appendChild(h("div", { class: "set-confirm" }, [
+          h("span", { text: "Esta categoria tem " + count + (count === 1 ? " tarefa." : " tarefas.") + " O que fazer com elas?" }),
+          dest,
+          h("button", { class: "btn primary", type: "button", text: "Confirmar", onclick: function () { removeCol(c.id, dest.value); } }),
+          h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { ui.removing = null; render(); } })
+        ]));
+      }
+      box.appendChild(row);
+    });
+    var newName = h("input", { id: "cn-new", type: "text", placeholder: "Nova categoria, por exemplo Pintura", maxlength: "40", "aria-label": "Nome da nova categoria" });
+    var newShift = shiftSelect("central", "cs-new", "Turno da nova categoria");
+    box.appendChild(h("form", { class: "set-row", onsubmit: function (e) {
+      e.preventDefault();
+      var v = newName.value.trim(); if (!v) return;
+      state.cols.push({ id: "c" + Date.now().toString(36), name: v, shift: newShift.value });
+      save(); render();
+    } }, [newName, newShift, h("button", { class: "btn primary", type: "submit", text: "Adicionar categoria" })]));
+  }
+
+  document.getElementById("hoje").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  document.getElementById("ver").textContent = "VERSÃO " + VERSION;
+  document.getElementById("limpar").addEventListener("click", function () { state.tasks = []; state.example = false; save(); render(); });
+  document.getElementById("ocultar").addEventListener("click", function () { state.hideNotice = true; save(); render(); });
+  document.getElementById("config").addEventListener("click", function () { ui.settings = !ui.settings; ui.removing = null; render(); });
+  document.getElementById("exp-json").addEventListener("click", function () { saveFile("manutencao-" + todayIso + ".json", buildBackup()); });
+  document.getElementById("exp-csv").addEventListener("click", function () { saveFile("manutencao-" + todayIso + ".csv", buildCsv()); });
+  document.getElementById("imp").addEventListener("click", function () { document.getElementById("imp-file").click(); });
+  document.getElementById("imp-file").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (f) readImport(f);
+    try { e.target.value = ""; } catch (err) {}
+  });
+  document.getElementById("whats").addEventListener("click", function () { ui.wopen = true; render(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && ui.wopen) { ui.wopen = false; render(); var w = document.getElementById("whats"); try { w.focus(); } catch (x) {} } });
+  document.getElementById("copiar").addEventListener("click", function () {
+    var btn = this, msg = buildMessage("ambos");
+    function say(t) { btn.setAttribute("data-flash", t); setTimeout(function () { btn.removeAttribute("data-flash"); }, 2000); }
+    try { navigator.clipboard.writeText(msg).then(function () { say("Mensagem copiada"); }, function () { say("Não foi possível copiar"); }); }
+    catch (e) { say("Não foi possível copiar"); }
+  });
+  /* ===== Nuvem (Firebase), usuários, fotos e Drive ===== */
+  var CFG = window.APP_CONFIG || {};
+  var ADMIN = String(CFG.adminEmail || "").trim().toLowerCase();
+  var CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  var FOTO_MAX = 4;
+  var DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+  var DAPI = "https://www.googleapis.com/drive/v3/";
+  var cloud = { fb: null, app: null, db: null, ref: null, unsub: null, timer: null, ready: false, auth: null, user: null, admin: false, granted: false, accUnsub: null, subs: [], cfg: {}, fotos: [], users: [], reqs: [] };
+  var drv = { tok: null, exp: 0, client: null, cb: null, eb: null, scripts: {} };
+  ui.sheet = null; ui.fotoTask = null;
+
+  function cloudStatus(t, k) {
+    var e = document.getElementById("cloud"); if (!e) return;
+    e.textContent = t; if (k) e.setAttribute("data-s", k); else e.removeAttribute("data-s");
+  }
+  function cloudPush() {
+    if (!cloud.ready || !cloud.ref || !cloud.granted) return;
+    clearTimeout(cloud.timer);
+    cloud.timer = setTimeout(function () {
+      var fb = cloud.fb;
+      var data = JSON.parse(JSON.stringify({ cols: state.cols, tasks: state.tasks, events: state.events, next: state.next, seed: state.seed || "", evSeed: state.evSeed || "", v: VERSION, by: CLIENT }));
+      data.updatedAt = fb.serverTimestamp();
+      cloudStatus("Salvando na nuvem…", "wait");
+      Promise.resolve(fb.setDoc(cloud.ref, data)).then(
+        function () { cloudStatus("Sincronizado", "ok"); },
+        function (e) { cloudStatus("Erro ao salvar na nuvem: " + ((e && e.code) || "desconhecido") + ". Os dados continuam salvos neste aparelho.", "err"); }
+      );
+    }, 400);
+  }
+  function applyRemote(d) {
+    var n = normalizeBackup(d);
+    if (!n) return;
+    state.cols = n.cols; state.tasks = n.tasks; state.next = n.next; state.events = n.events || [];
+    state.seed = SEED_VERSION; state.evSeed = "1.4"; state.example = false; state.hideNotice = true;
+    if (ui.editing && !state.tasks.some(function (t) { return t.id === ui.editing; })) ui.editing = null;
+    if (ui.adding && !state.cols.some(function (c) { return c.id === ui.adding; })) ui.adding = null;
+    if (ui.cal.form && ui.cal.form.id && !state.events.some(function (e) { return e.id === ui.cal.form.id; })) ui.cal.form = null;
+    localSave(); render();
+  }
+  function stopAll() {
+    if (cloud.unsub) { try { cloud.unsub(); } catch (e) {} }
+    cloud.unsub = null; cloud.ready = false;
+    cloud.subs.forEach(function (u) { try { u(); } catch (e) {} });
+    cloud.subs = []; cloud.fotos = []; cloud.users = []; cloud.reqs = []; cloud.cfg = {};
+  }
+  function sub(ref, fn, label) {
+    cloud.subs.push(cloud.fb.onSnapshot(ref, fn, function (e) {
+      cloudStatus("Erro na nuvem (" + label + "): " + ((e && e.code) || "desconhecido"), "err");
+    }));
+  }
+  function startSync() {
+    var fb = cloud.fb;
+    cloudStatus("Conectando…", "wait");
+    cloud.unsub = fb.onSnapshot(cloud.ref, function (snap) {
+      if (!snap.exists()) { cloud.ready = true; cloudPush(); return; }
+      cloud.ready = true;
+      var meta = snap.metadata || {};
+      if (meta.hasPendingWrites) return;
+      var d = snap.data();
+      if (d.by === CLIENT) { cloudStatus("Sincronizado", "ok"); return; }
+      applyRemote(d);
+      if (meta.fromCache) cloudStatus("Sem conexão: mostrando a última cópia salva", "wait"); else cloudStatus("Sincronizado", "ok");
+    }, function (e) {
+      var code = (e && e.code) || "desconhecido";
+      cloudStatus(code === "permission-denied" ? "Sem permissão para acessar os dados da nuvem" : "Erro na nuvem: " + code, "err");
+    });
+  }
+  function grant() {
+    if (cloud.granted) return;
+    var fb = cloud.fb, db = cloud.db;
+    cloud.granted = true; showLogin(false);
+    startSync();
+    sub(fb.collection(db, "fotos"), function (snap) { var a = []; snap.forEach(function (d) { var x = d.data(); x.id = d.id; a.push(x); }); cloud.fotos = a; render(); }, "fotos");
+    sub(fb.doc(db, "manutencao", "config"), function (snap) { cloud.cfg = snap.exists() ? snap.data() : {}; render(); }, "config");
+    if (cloud.admin) {
+      sub(fb.collection(db, "usuarios"), function (snap) { var a = []; snap.forEach(function (d) { a.push(d.data()); }); cloud.users = a; render(); }, "usuários");
+      sub(fb.collection(db, "solicitacoes"), function (snap) { var a = []; snap.forEach(function (d) { a.push(d.data()); }); cloud.reqs = a; render(); }, "pedidos");
+    }
+    if (driveEnabled()) loadGis().catch(function () {});
+    render();
+  }
+  function lock(msg, signedIn, wipe) {
+    cloud.granted = false; stopAll();
+    if (wipe && !cloud.admin) {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      state.tasks = []; state.events = [];
+    }
+    ui.sheet = null; ui.adding = null; ui.editing = null;
+    render();
+    showLogin(true, msg, !!signedIn);
+  }
+  function showLogin(show, msg, signedIn) {
+    document.getElementById("login").hidden = !show;
+    document.getElementById("login-msg").textContent = msg || "";
+    document.getElementById("login-btn").hidden = !!signedIn;
+    document.getElementById("login-out").hidden = !signedIn;
+    document.getElementById("login-t").textContent = signedIn ? "Acesso não liberado" : "Entrar";
+  }
+  function requestAccess() {
+    var fb = cloud.fb;
+    Promise.resolve(fb.setDoc(fb.doc(cloud.db, "solicitacoes", cloud.user.email), { email: cloud.user.email, nome: cloud.user.name || "", at: fb.serverTimestamp() })).catch(function () {});
+  }
+  function onUser(u) {
+    var fb = cloud.fb;
+    if (cloud.accUnsub) { try { cloud.accUnsub(); } catch (e) {} cloud.accUnsub = null; }
+    cloud.granted = false; stopAll();
+    if (!u) {
+      cloud.user = null; cloud.admin = false;
+      lock("", false, false); cloudStatus("É preciso entrar para sincronizar", "wait");
+      return;
+    }
+    cloud.user = { email: String(u.email || "").toLowerCase(), name: u.displayName || u.email || "" };
+    cloud.admin = !!ADMIN && cloud.user.email === ADMIN;
+    if (cloud.admin) { grant(); return; }
+    cloudStatus("Verificando acesso…", "wait");
+    cloud.accUnsub = fb.onSnapshot(fb.doc(cloud.db, "usuarios", cloud.user.email), function (snap) {
+      if (snap.exists()) { grant(); return; }
+      lock("Seu acesso ainda não foi liberado. O pedido foi enviado à administradora; depois que ela aprovar, abra o app de novo.", true, true);
+      requestAccess();
+    }, function (e) {
+      lock("Não foi possível verificar o acesso (" + ((e && e.code) || "erro") + ").", true, false);
+    });
+  }
+  function loadSdk() {
+    var b = "https://www.gstatic.com/firebasejs/10.14.1/";
+    return Promise.all([import(b + "firebase-app.js"), import(b + "firebase-firestore.js"), import(b + "firebase-auth.js")])
+      .then(function (m) { return Object.assign({}, m[0], m[1], m[2]); });
+  }
+  function initCloud() {
+    if (!CFG.firebase || !CFG.firebase.apiKey) { cloudStatus("Somente neste aparelho (nuvem não configurada)"); return; }
+    cloudStatus("Conectando…", "wait");
+    (window.__FB_MOCK ? Promise.resolve(window.__FB_MOCK) : loadSdk()).then(function (fb) {
+      cloud.fb = fb;
+      cloud.app = fb.initializeApp(CFG.firebase);
+      var db;
+      try { db = fb.initializeFirestore(cloud.app, { localCache: fb.persistentLocalCache({ tabManager: fb.persistentMultipleTabManager() }) }); }
+      catch (e) { db = fb.getFirestore(cloud.app); }
+      cloud.db = db;
+      var path = (CFG.docPath || "manutencao/quadro").split("/");
+      cloud.ref = fb.doc(db, path[0], path[1]);
+      cloud.auth = fb.getAuth(cloud.app);
+      document.getElementById("login-btn").addEventListener("click", function () {
+        fb.signInWithPopup(cloud.auth, new fb.GoogleAuthProvider()).catch(function (e) { showLogin(true, "Não foi possível entrar (" + ((e && e.code) || "erro") + ").", false); });
+      });
+      function out() {
+        drv.tok = null;
+        if (!cloud.admin) { try { localStorage.removeItem(KEY); } catch (e) {} state.tasks = []; state.events = []; render(); }
+        fb.signOut(cloud.auth);
+      }
+      document.getElementById("login-out").addEventListener("click", out);
+      document.getElementById("sair").addEventListener("click", out);
+      showLogin(true, "", false);
+      fb.onAuthStateChanged(cloud.auth, onUser);
+    }).catch(function () { cloudStatus("Nuvem indisponível. Os dados continuam salvos neste aparelho.", "err"); });
+  }
+
+  /* ----- chrome (botões que dependem do acesso) ----- */
+  function renderChrome() {
+    var on = !!cloud.granted;
+    document.getElementById("usuarios").hidden = !(on && cloud.admin);
+    document.getElementById("drive").hidden = !(on && driveEnabled());
+    document.getElementById("sair").hidden = !cloud.user;
+  }
+
+  /* ----- fotos nos cartões ----- */
+  function fotosOf(id) {
+    return cloud.fotos.filter(function (f) { return f.task === id; }).sort(function (a, b) { return (a.at && a.at.seconds || 9e12) - (b.at && b.at.seconds || 9e12); });
+  }
+  var TIPOS = { antes: "Antes", depois: "Depois", outra: "Outra" };
+  function photosRow(task) {
+    var fs = fotosOf(task.id);
+    if (!fs.length) return null;
+    return h("div", { class: "photos" }, fs.map(function (f) {
+      var img = h("img", { alt: "Foto " + (TIPOS[f.tipo] || "") + " da tarefa " + task.id, loading: "lazy" });
+      img.src = f.thumb || "";
+      return h("button", { class: "ph", type: "button", title: (TIPOS[f.tipo] || "Foto"), onclick: function () { ui.sheet = { kind: "foto-ver", id: f.id }; render(); } }, [img, h("b", { text: (TIPOS[f.tipo] || "?").charAt(0) })]);
+    }));
+  }
+  function photoBtn(task) {
+    if (!(cloud.granted && driveEnabled())) return null;
+    var n = fotosOf(task.id).length;
+    return h("button", { class: "icon-btn", type: "button", text: "Foto " + n + "/" + FOTO_MAX, title: "Adicionar foto (até " + FOTO_MAX + ")", onclick: function () { addPhoto(task); } });
+  }
+  function removeTask(id) {
+    state.tasks = state.tasks.filter(function (x) { return x.id !== id; });
+    save();
+    if (cloud.granted) fotosOf(id).forEach(function (f) { Promise.resolve(cloud.fb.deleteDoc(cloud.fb.doc(cloud.db, "fotos", f.id))).catch(function () {}); });
+    render();
+  }
+  function addPhoto(task) {
+    if (!driveConnected()) { ui.sheet = { kind: "drive", msg: cloud.cfg.driveFolderId ? "Conecte-se à pasta de fotos antes de enviar fotos." : "A administradora ainda não criou a pasta de fotos." }; render(); return; }
+    if (fotosOf(task.id).length >= FOTO_MAX) { ui.sheet = { kind: "aviso", msg: "Esta tarefa já tem " + FOTO_MAX + " fotos. Apague uma para enviar outra." }; render(); return; }
+    ui.fotoTask = task;
+    document.getElementById("foto-file").click();
+  }
+  document.getElementById("foto-file").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    try { e.target.value = ""; } catch (x) {}
+    if (!f || !ui.fotoTask) return;
+    if (!/^image\//.test(f.type)) { ui.sheet = { kind: "aviso", msg: "Escolha um arquivo de imagem." }; render(); return; }
+    ui.sheet = { kind: "foto-novo", task: ui.fotoTask, file: f, tipo: "antes", url: URL.createObjectURL(f) }; render();
+  });
+
+  function shrink(file, max, q) {
+    return new Promise(function (ok, bad) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        var c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? ok(b) : bad(new Error("imagem")); }, "image/jpeg", q);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); bad(new Error("imagem")); };
+      img.src = url;
+    });
+  }
+  function blobToDataUrl(b) {
+    return new Promise(function (ok, bad) { var r = new FileReader(); r.onload = function () { ok(String(r.result)); }; r.onerror = function () { bad(new Error("leitura")); }; r.readAsDataURL(b); });
+  }
+
+  /* ----- Google Drive ----- */
+  function driveEnabled() { return !!(CFG.drive && CFG.drive.clientId); }
+  function flagKey() { return "manutencao-drive:" + (cloud.user ? cloud.user.email : ""); }
+  function driveConnected() {
+    var id = cloud.cfg && cloud.cfg.driveFolderId;
+    if (!id) return false;
+    try { return localStorage.getItem(flagKey()) === id; } catch (e) { return false; }
+  }
+  function setConnected(id) { try { localStorage.setItem(flagKey(), id); } catch (e) {} }
+  function loadScript(src) {
+    if (drv.scripts[src]) return drv.scripts[src];
+    return (drv.scripts[src] = new Promise(function (ok, bad) {
+      var el = document.createElement("script"); el.src = src; el.async = true;
+      el.onload = ok; el.onerror = function () { delete drv.scripts[src]; bad(new Error("script")); };
+      document.head.appendChild(el);
+    }));
+  }
+  function loadGis() { return (window.google && window.google.accounts && window.google.accounts.oauth2) ? Promise.resolve() : loadScript("https://accounts.google.com/gsi/client"); }
+  function driveToken() {
+    if (window.__DRIVE_TOKEN) return Promise.resolve(window.__DRIVE_TOKEN);
+    if (drv.tok && Date.now() < drv.exp - 60000) return Promise.resolve(drv.tok);
+    return loadGis().then(function () {
+      return new Promise(function (ok, bad) {
+        if (!drv.client) drv.client = window.google.accounts.oauth2.initTokenClient({ client_id: CFG.drive.clientId, scope: DRIVE_SCOPE,
+          callback: function (r) { drv.cb(r); }, error_callback: function (e) { drv.eb(e); } });
+        drv.cb = function (r) {
+          if (r && r.access_token) { drv.tok = r.access_token; drv.exp = Date.now() + (+r.expires_in || 3600) * 1000; ok(drv.tok); }
+          else bad(new Error((r && r.error) || "token"));
+        };
+        drv.eb = function (e) { bad(new Error((e && e.type) || "popup")); };
+        drv.client.requestAccessToken({ login_hint: cloud.user ? cloud.user.email : undefined });
+      });
+    });
+  }
+  function driveFetch(url, opts) {
+    return driveToken().then(function (tok) {
+      opts = opts || {};
+      opts.headers = Object.assign({}, opts.headers, { Authorization: "Bearer " + tok });
+      return fetch(url, opts).then(function (r) {
+        if (r.status === 401) drv.tok = null;
+        if (!r.ok) { var e = new Error("drive " + r.status); e.status = r.status; throw e; }
+        return r.status === 204 ? null : r.json();
+      });
+    });
+  }
+  function driveErrText(e) {
+    var m = (e && e.message) || "", st = e && e.status;
+    if (/popup|cancel|access_denied|token/.test(m)) return "A autorização do Google foi cancelada ou bloqueada. Tente de novo e permita o acesso ao Drive.";
+    if (st === 404 || st === 403) return "Sem acesso à pasta de fotos. Abra “Fotos e Drive” e conecte-se à pasta.";
+    if (st === 401) return "A sessão do Google expirou. Tente de novo.";
+    if (m === "config") return "Faltam dados do Drive no firebase-config.js (apiKey e appId).";
+    return "Não foi possível falar com o Drive (" + (st || m || "erro") + ").";
+  }
+  function driveUpload(blob, name, desc) {
+    var meta = { name: name, parents: [cloud.cfg.driveFolderId], mimeType: "image/jpeg", description: desc || "" };
+    var b = "mnt" + Math.random().toString(36).slice(2) + Date.now();
+    var body = new Blob(["--" + b + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify(meta) + "\r\n--" + b + "\r\nContent-Type: image/jpeg\r\n\r\n", blob, "\r\n--" + b + "--"]);
+    return driveFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + b }, body: body });
+  }
+  function driveCreateFolder() {
+    return driveFetch(DAPI + "files?fields=id,webViewLink", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Manutenção – Fotos", mimeType: "application/vnd.google-apps.folder" }) });
+  }
+  function driveShare(email) {
+    return driveFetch(DAPI + "files/" + cloud.cfg.driveFolderId + "/permissions?sendNotificationEmail=false", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: "writer", type: "user", emailAddress: email }) });
+  }
+  function driveUnshare(email) {
+    var id = cloud.cfg.driveFolderId;
+    return driveFetch(DAPI + "files/" + id + "/permissions?fields=permissions(id,emailAddress)").then(function (r) {
+      var p = (r.permissions || []).filter(function (x) { return String(x.emailAddress || "").toLowerCase() === email; })[0];
+      return p ? driveFetch(DAPI + "files/" + id + "/permissions/" + p.id, { method: "DELETE" }) : null;
+    });
+  }
+  function driveDelete(id) { return driveFetch(DAPI + "files/" + id, { method: "DELETE" }); }
+  function pickFolder() {
+    if (!CFG.drive.apiKey || !CFG.drive.appId) return Promise.reject(new Error("config"));
+    var api = window.gapi ? Promise.resolve() : loadScript("https://apis.google.com/js/api.js");
+    return Promise.all([driveToken(), api.then(function () { return new Promise(function (ok) { window.gapi.load("picker", ok); }); })]).then(function (r) {
+      return new Promise(function (ok, bad) {
+        var g = window.google.picker;
+        var view = new g.DocsView(g.ViewId.FOLDERS).setIncludeFolders(true).setSelectFolderEnabled(true);
+        try { view.setFileIds(cloud.cfg.driveFolderId); } catch (e) {}
+        var p = new g.PickerBuilder().addView(view).setOAuthToken(r[0]).setDeveloperKey(CFG.drive.apiKey).setAppId(CFG.drive.appId).setLocale("pt-BR")
+          .setCallback(function (d) {
+            if (d.action === "picked") ok(d.docs && d.docs[0]);
+            else if (d.action === "cancel") bad(new Error("cancel"));
+          }).build();
+        p.setVisible(true);
+      });
+    });
+  }
+
+  /* ----- janelas (usuários, Drive, fotos) ----- */
+  function closeSheet() { if (ui.sheet && ui.sheet.url) { try { URL.revokeObjectURL(ui.sheet.url); } catch (e) {} } ui.sheet = null; render(); }
+  function renderSheet() {
+    var m = document.getElementById("sheet"), s = ui.sheet;
+    m.textContent = ""; m.hidden = !s;
+    if (!s) return;
+    var box = h("div", { class: "modal-box wide" });
+    m.appendChild(box);
+    m.onclick = function (e) { if (e.target === m) closeSheet(); };
+    if (s.kind === "users") sheetUsers(box, s);
+    else if (s.kind === "drive") sheetDrive(box, s);
+    else if (s.kind === "foto-novo") sheetNovo(box, s);
+    else if (s.kind === "foto-ver") sheetVer(box, s);
+    else sheetAviso(box, s);
+  }
+  function addTo(p, n) { if (n) p.appendChild(n); }
+  function msgLine(s) { return s.msg ? h("p", { class: "sheet-msg", role: "status", text: s.msg }) : null; }
+  function note(s, t) { s.msg = t; render(); }
+  function sheetAviso(box, s) {
+    box.appendChild(h("h2", { text: "Aviso" }));
+    box.appendChild(h("p", { style: "margin:0", text: s.msg || "" }));
+    box.appendChild(h("div", { class: "actions" }, [h("button", { class: "btn primary", type: "button", text: "Fechar", onclick: closeSheet })]));
+  }
+  function prepToken() { return (driveEnabled() && cloud.cfg.driveFolderId) ? driveToken().catch(function () { return null; }) : Promise.resolve(null); }
+
+  function addUser(s, email, nome) {
+    email = String(email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return note(s, "Digite um e-mail válido.");
+    var fb = cloud.fb, tp = prepToken();
+    Promise.resolve(fb.setDoc(fb.doc(cloud.db, "usuarios", email), { email: email, papel: "membro", nome: String(nome || "").trim().slice(0, 60), por: cloud.user.email, at: fb.serverTimestamp() }))
+      .then(function () { return Promise.resolve(fb.deleteDoc(fb.doc(cloud.db, "solicitacoes", email))).catch(function () {}); })
+      .then(function () { return tp; })
+      .then(function () {
+        if (!cloud.cfg.driveFolderId || !driveEnabled()) return "acesso liberado.";
+        return driveShare(email).then(function () { return "acesso liberado e pasta do Drive compartilhada."; },
+          function () { return "acesso liberado, mas não consegui compartilhar a pasta do Drive. Compartilhe a pasta com essa pessoa direto no Drive."; });
+      })
+      .then(function (t) { note(s, email + ": " + t); }, function (e) { note(s, "Não foi possível adicionar (" + ((e && e.code) || "erro") + ")."); });
+  }
+  function removeUser(s, email) {
+    var fb = cloud.fb, tp = prepToken();
+    s.confirm = null;
+    Promise.resolve(fb.deleteDoc(fb.doc(cloud.db, "usuarios", email)))
+      .then(function () { return tp; })
+      .then(function () {
+        if (!cloud.cfg.driveFolderId || !driveEnabled()) return "acesso removido.";
+        return driveUnshare(email).then(function () { return "acesso removido e retirado da pasta do Drive."; },
+          function () { return "acesso ao app removido, mas não consegui retirar da pasta do Drive. Remova a pessoa da pasta direto no Drive."; });
+      })
+      .then(function (t) { note(s, email + ": " + t); }, function (e) { note(s, "Não foi possível remover (" + ((e && e.code) || "erro") + ")."); });
+  }
+  function sheetUsers(box, s) {
+    box.appendChild(h("h2", { text: "Usuários" }));
+    box.appendChild(h("p", { class: "hint", style: "margin:0", text: "Quem está na lista entra no app com a conta Google. Remover corta o acesso na hora." }));
+    addTo(box, msgLine(s));
+    if (cloud.reqs.length) {
+      box.appendChild(h("h3", { text: "Pedidos de acesso" }));
+      box.appendChild(h("div", { class: "sheet-list" }, cloud.reqs.map(function (r) {
+        return h("div", { class: "sheet-row" }, [
+          h("div", { class: "who" }, [r.nome || r.email, h("small", { text: r.email })]),
+          h("span", null, [
+            h("button", { class: "btn primary", type: "button", text: "Aprovar", onclick: function () { addUser(s, r.email, r.nome); } }),
+            h("button", { class: "btn", type: "button", text: "Recusar", onclick: function () { Promise.resolve(cloud.fb.deleteDoc(cloud.fb.doc(cloud.db, "solicitacoes", r.email))).catch(function () {}); } })
+          ])
+        ]);
+      })));
+    }
+    box.appendChild(h("h3", { text: "Com acesso (" + (cloud.users.length + 1) + ")" }));
+    var rows = [h("div", { class: "sheet-row" }, [h("div", { class: "who" }, [ADMIN, h("small", { text: "Administradora" })])])];
+    cloud.users.slice().sort(function (a, b) { return String(a.email).localeCompare(String(b.email)); }).forEach(function (u) {
+      var right = s.confirm === u.email
+        ? h("span", null, [h("button", { class: "btn danger", type: "button", text: "Confirmar remoção", onclick: function () { removeUser(s, u.email); } }), h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { s.confirm = null; render(); } })])
+        : h("button", { class: "btn danger", type: "button", text: "Remover", onclick: function () { s.confirm = u.email; s.msg = ""; render(); } });
+      rows.push(h("div", { class: "sheet-row" }, [h("div", { class: "who" }, [u.nome || u.email, u.nome ? h("small", { text: u.email }) : null]), right]));
+    });
+    box.appendChild(h("div", { class: "sheet-list" }, rows));
+    box.appendChild(h("h3", { text: "Adicionar pessoa" }));
+    var em = h("input", { type: "email", placeholder: "gmail da pessoa", "aria-label": "E-mail da pessoa", required: "required", autocomplete: "off" });
+    var nm = h("input", { type: "text", placeholder: "nome (opcional)", "aria-label": "Nome", maxlength: "60" });
+    box.appendChild(h("form", { class: "inline", onsubmit: function (e) { e.preventDefault(); addUser(s, em.value, nm.value); } }, [em, nm, h("button", { class: "btn primary", type: "submit", text: "Adicionar" })]));
+    box.appendChild(h("div", { class: "actions" }, [h("button", { class: "btn", type: "button", text: "Fechar", onclick: closeSheet })]));
+  }
+
+  function sheetDrive(box, s) {
+    var id = cloud.cfg.driveFolderId, conn = driveConnected();
+    box.appendChild(h("h2", { text: "Fotos e Drive" }));
+    addTo(box, msgLine(s));
+    box.appendChild(h("p", { style: "margin:0", text: id ? (conn ? "Pasta de fotos conectada neste aparelho." : "A pasta de fotos existe, mas este aparelho ainda não está conectado a ela.") : "A pasta de fotos ainda não foi criada." }));
+    var acts = [];
+    if (cloud.admin && !id) {
+      acts.push(h("button", { class: "btn primary", type: "button", text: "Criar pasta no meu Drive", onclick: function () {
+        note(s, "Criando a pasta…");
+        driveCreateFolder().then(function (f) {
+          return Promise.resolve(cloud.fb.setDoc(cloud.fb.doc(cloud.db, "manutencao", "config"), { driveFolderId: f.id, driveFolderUrl: f.webViewLink || "", por: cloud.user.email, at: cloud.fb.serverTimestamp() })).then(function () {
+            setConnected(f.id); cloud.cfg = { driveFolderId: f.id, driveFolderUrl: f.webViewLink || "" };
+            var us = cloud.users.map(function (u) { return u.email; });
+            return Promise.all(us.map(function (e) { return driveShare(e).catch(function () { return null; }); }));
+          });
+        }).then(function () { note(s, "Pasta criada e compartilhada com os usuários atuais."); }, function (e) { note(s, driveErrText(e)); });
+      } }));
+    }
+    if (cloud.admin && id) {
+      acts.push(h("button", { class: "btn", type: "button", text: "Compartilhar com todos os usuários", onclick: function () {
+        note(s, "Compartilhando…");
+        var us = cloud.users.map(function (u) { return u.email; });
+        Promise.all(us.map(function (e) { return driveShare(e).then(function () { return 1; }, function () { return 0; }); })).then(function (r) {
+          var ok = r.reduce(function (a, b) { return a + b; }, 0);
+          note(s, ok + " de " + us.length + " usuários com acesso à pasta.");
+        });
+      } }));
+    }
+    if (!cloud.admin && id && !conn) {
+      acts.push(h("button", { class: "btn primary", type: "button", text: "Conectar à pasta (escolher no Drive)", onclick: function () {
+        pickFolder().then(function (d) {
+          if (d && d.id === id) { setConnected(id); note(s, "Conectado à pasta de fotos."); }
+          else note(s, "Escolha a pasta “Manutenção – Fotos” que a administradora compartilhou com você.");
+        }, function (e) { note(s, e && e.message === "cancel" ? "Escolha cancelada." : driveErrText(e)); });
+      } }));
+    }
+    if (id && conn) {
+      acts.push(h("button", { class: "btn", type: "button", text: "Testar Drive", onclick: function () {
+        note(s, "Testando: enviando e apagando um arquivo de teste…");
+        var c = document.createElement("canvas"); c.width = c.height = 8;
+        c.toBlob(function (b) {
+          if (!b) return note(s, "Este navegador não conseguiu gerar o arquivo de teste.");
+          driveUpload(b, "teste-" + Date.now() + ".jpg", "Teste do app (pode apagar)").then(function (f) { return driveDelete(f.id); })
+            .then(function () { note(s, "Drive funcionando: enviar e apagar deu certo."); }, function (e) { note(s, driveErrText(e)); });
+        }, "image/jpeg", 0.5);
+      } }));
+    }
+    if (id && cloud.cfg.driveFolderUrl) acts.push(h("a", { class: "btn", href: cloud.cfg.driveFolderUrl, target: "_blank", rel: "noopener", text: "Abrir pasta no Drive" }));
+    acts.push(h("button", { class: "btn", type: "button", text: "Fechar", onclick: closeSheet }));
+    box.appendChild(h("div", { class: "actions" }, acts));
+  }
+
+  function sheetNovo(box, s) {
+    var task = s.task;
+    box.appendChild(h("h2", { text: "Nova foto · " + task.id }));
+    var img = h("img", { alt: "Prévia da foto", style: "max-width:100%;max-height:40vh;object-fit:contain;border-radius:4px;background:var(--col)" });
+    img.src = s.url;
+    box.appendChild(img);
+    box.appendChild(h("div", { role: "radiogroup", "aria-label": "Tipo da foto" }, Object.keys(TIPOS).map(function (k) {
+      return h("label", { class: "opt" }, [h("input", { type: "radio", name: "tp", value: k, checked: s.tipo === k ? "checked" : false, disabled: s.busy ? "disabled" : false, onchange: function () { s.tipo = k; } }), TIPOS[k]]);
+    })));
+    addTo(box, msgLine(s));
+    box.appendChild(h("div", { class: "actions" }, [
+      h("button", { class: "btn", type: "button", text: "Cancelar", disabled: s.busy ? "disabled" : false, onclick: closeSheet }),
+      h("button", { class: "btn primary", type: "button", text: s.busy ? "Enviando…" : "Enviar", disabled: s.busy ? "disabled" : false, onclick: function () { sendPhoto(s); } })
+    ]));
+  }
+  function sendPhoto(s) {
+    var task = s.task, tipo = s.tipo || "antes", fb = cloud.fb;
+    var tp = driveToken();
+    var big = shrink(s.file, 2000, 0.82), small = shrink(s.file, 480, 0.65);
+    var d = new Date(), pad2 = function (n) { return String(n).padStart(2, "0"); };
+    var name = todayIso + "_" + task.id + "_" + tipo + "_" + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds()) + ".jpg";
+    s.busy = true; s.msg = "Enviando…"; render();
+    Promise.all([tp, big, small]).then(function (r) {
+      return driveUpload(r[1], name, task.id + " · " + task.title).then(function (up) {
+        return blobToDataUrl(r[2]).then(function (th) { return { up: up, th: th }; });
+      });
+    }).then(function (x) {
+      var id = "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      return fb.setDoc(fb.doc(cloud.db, "fotos", id), { task: task.id, tipo: tipo, thumb: x.th, driveId: x.up.id, link: x.up.webViewLink || "", name: name, by: cloud.user.email, byName: cloud.user.name || "", at: fb.serverTimestamp() });
+    }).then(function () { closeSheet(); say("Foto enviada."); },
+      function (e) { s.busy = false; s.msg = driveErrText(e); render(); });
+  }
+  function sheetVer(box, s) {
+    var f = cloud.fotos.filter(function (x) { return x.id === s.id; })[0];
+    if (!f) { ui.sheet = null; setTimeout(render, 0); return; }
+    var mine = cloud.user && f.by === cloud.user.email;
+    box.classList.add("viewer");
+    box.appendChild(h("h2", { text: (TIPOS[f.tipo] || "Foto") + " · " + f.task }));
+    var img = h("img", { alt: "Foto " + (TIPOS[f.tipo] || "") }); img.src = f.thumb || "";
+    box.appendChild(img);
+    box.appendChild(h("p", { class: "ev-meta", style: "margin:0", text: (f.byName || f.by || "") + (f.at && f.at.seconds ? " · " + new Date(f.at.seconds * 1000).toLocaleDateString("pt-BR") : "") }));
+    addTo(box, msgLine(s));
+    var acts = [];
+    if (f.link) acts.push(h("a", { class: "btn primary", href: f.link, target: "_blank", rel: "noopener", text: "Abrir original no Drive" }));
+    if (cloud.admin || mine) {
+      acts.push(s.confirm ? h("button", { class: "btn danger", type: "button", text: "Confirmar exclusão", onclick: function () {
+        var tp = driveToken().catch(function () { return null; });
+        Promise.resolve(cloud.fb.deleteDoc(cloud.fb.doc(cloud.db, "fotos", f.id))).then(function () { return tp; }).then(function (t) {
+          if (t && f.driveId) return driveDelete(f.driveId).catch(function () { return null; });
+        }).then(function () { closeSheet(); say("Foto excluída."); }, function (e) { note(s, "Não foi possível excluir (" + ((e && e.code) || "erro") + ")."); });
+      } }) : h("button", { class: "btn danger", type: "button", text: "Excluir foto", onclick: function () { s.confirm = true; render(); } }));
+    }
+    acts.push(h("button", { class: "btn", type: "button", text: "Fechar", onclick: closeSheet }));
+    box.appendChild(h("div", { class: "actions" }, acts));
+  }
+
+  document.getElementById("usuarios").addEventListener("click", function () { ui.sheet = { kind: "users" }; render(); });
+  document.getElementById("drive").addEventListener("click", function () { ui.sheet = { kind: "drive" }; render(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && ui.sheet) closeSheet(); });
+
+  window.addEventListener("offline", function () { if (cloud.ref) cloudStatus("Sem conexão: as alterações ficam salvas neste aparelho e sobem quando voltar a internet", "wait"); });
+  window.addEventListener("online", function () { if (cloud.ref && cloud.ready) cloudPush(); });
+  var installEv = null;
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installEv = e; document.getElementById("instalar").hidden = false; });
+  window.addEventListener("appinstalled", function () { installEv = null; document.getElementById("instalar").hidden = true; });
+  document.getElementById("instalar").addEventListener("click", function () {
+    if (!installEv) return;
+    installEv.prompt(); installEv = null; this.hidden = true;
+  });
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
+  render();
+  initCloud();
+})();
+</script>
+</body>
+</html>
