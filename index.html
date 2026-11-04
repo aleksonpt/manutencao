@@ -404,7 +404,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 <script src="firebase-config.js"></script>
 <script>
 (function () {
-  var VERSION = "1.8";
+  var VERSION = "1.8.1";
   var KEY = "manutencao-quadro-v0";
   var OLD_DAYS = 30;
   var DEFAULT_COLS = [
@@ -1792,15 +1792,9 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   function taskText(t) {
     var c = state.cols.filter(function (x) { return x.id === t.col; })[0];
     var sh = c ? SHIFTS.filter(function (x) { return x.id === c.shift; })[0] : null;
-    var L = ["*Programação de Manutenção* · " + new Date().toLocaleDateString("pt-BR"), "", "*" + t.title + "*", "OS: " + t.id];
-    if (c) L.push("Categoria: " + c.name + (sh ? " (" + sh.name.toLowerCase() + ")" : ""));
-    if (t.local) L.push("Local: " + t.local);
-    L.push("Prioridade: " + PRIO[t.prio]);
-    L.push("Criada em " + fmtDate(t.created));
-    if (t.done) L.push("Realizada em " + fmtDate(t.doneAt || todayIso)); else L.push(daysLabel(daysOpen(t.created)));
-    var fs = cloud.granted ? fotosOf(t.id) : [];
-    if (fs.length) L.push("Fotos: " + fs.map(function (f) { return TIPOS[f.tipo] || "Foto"; }).join(", "));
-    return L.join("\n");
+    return ["*Programação de Manutenção* · " + new Date().toLocaleDateString("pt-BR"), "",
+      "*" + (c ? c.name : "Sem categoria") + (sh ? " (" + sh.name.toLowerCase() + ")" : "") + "*",
+      "• " + t.title + (t.local ? " — " + t.local : "")].join("\n");
   }
   function dataToBlob(u) { return fetch(u).then(function (r) { return r.blob(); }); }
   function fotoFile(f, blob) {
