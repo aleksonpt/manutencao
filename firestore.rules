@@ -1,0 +1,68 @@
+// REGRAS DO FIRESTORE — versão 1.7 (login Google + lista de usuários + fotos)
+// Troque o e-mail da administradora abaixo se for outro. Depois clique em Publicar.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function email() {
+      return request.auth.token.email.lower();
+    }
+    function admin() {
+      return logado() && email() == 'aleksonpartage@gmail.com';
+    }
+    function membro() {
+      return admin() || (logado() && exists(/databases/$(database)/documents/usuarios/$(email())));
+    }
+
+    // Quadro (categorias, tarefas e programações)
+    match /manutencao/quadro {
+      allow read: if membro();
+      allow create, update: if membro()
+        && request.resource.data.keys().hasOnly(['cols','tasks','events','next','seed','evSeed','v','by','updatedAt']);
+      allow delete: if false;
+    }
+
+    // Pasta do Drive usada para as fotos
+    match /manutencao/config {
+      allow read: if membro();
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['driveFolderId','driveFolderUrl','por','at']);
+      allow delete: if false;
+    }
+
+    // Lista de usuários (só a administradora gerencia; cada pessoa lê o próprio cadastro)
+    match /usuarios/{id} {
+      allow get: if admin() || (logado() && id == email());
+      allow list: if admin();
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['email','papel','nome','por','at'])
+        && request.resource.data.papel == 'membro';
+      allow delete: if admin();
+    }
+
+    // Pedidos de acesso (qualquer pessoa logada pede o próprio acesso)
+    match /solicitacoes/{id} {
+      allow create, update: if logado() && id == email()
+        && request.resource.data.keys().hasOnly(['email','nome','at']);
+      allow get, list, delete: if admin();
+    }
+
+    // Fotos das tarefas (miniatura + link do arquivo no Drive)
+    match /fotos/{id} {
+      allow read: if membro();
+      allow create: if membro()
+        && request.resource.data.by == email()
+        && request.resource.data.keys().hasOnly(['task','tipo','thumb','driveId','link','name','by','byName','at'])
+        && request.resource.data.thumb.size() < 200000;
+      allow update: if false;
+      allow delete: if admin() || (membro() && resource.data.by == email());
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
