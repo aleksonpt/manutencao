@@ -404,7 +404,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 <script src="firebase-config.js"></script>
 <script>
 (function () {
-  var VERSION = "1.8.1";
+  var VERSION = "1.8.2";
   var KEY = "manutencao-quadro-v0";
   var OLD_DAYS = 30;
   var DEFAULT_COLS = [
@@ -1127,15 +1127,21 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   }
 
   function tasksMessage() {
-    var lines = [];
+    var groups = [], idx = {};
     SHIFTS.forEach(function (s) {
       state.cols.filter(function (c) { return c.shift === s.id; }).forEach(function (c) {
         var ts = state.tasks.filter(function (t) { return t.col === c.id && !t.done; });
         if (!ts.length) return;
-        lines.push("*" + c.name + " (" + s.name.toLowerCase() + ")*");
-        ts.forEach(function (t) { lines.push("• " + t.title + (t.local ? " — " + t.local : "")); });
-        lines.push("");
+        var k = c.name.trim().toLowerCase();
+        if (idx[k] === undefined) { idx[k] = groups.length; groups.push({ name: c.name, ts: [] }); }
+        groups[idx[k]].ts = groups[idx[k]].ts.concat(ts);
       });
+    });
+    var lines = [];
+    groups.forEach(function (g) {
+      lines.push("*" + g.name + "*");
+      g.ts.forEach(function (t) { lines.push("• " + t.title + (t.local ? " — " + t.local : "")); });
+      lines.push("");
     });
     return lines.join("\n").replace(/\s+$/, "");
   }
@@ -1791,9 +1797,8 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   }
   function taskText(t) {
     var c = state.cols.filter(function (x) { return x.id === t.col; })[0];
-    var sh = c ? SHIFTS.filter(function (x) { return x.id === c.shift; })[0] : null;
     return ["*Programação de Manutenção* · " + new Date().toLocaleDateString("pt-BR"), "",
-      "*" + (c ? c.name : "Sem categoria") + (sh ? " (" + sh.name.toLowerCase() + ")" : "") + "*",
+      "*" + (c ? c.name : "Sem categoria") + "*",
       "• " + t.title + (t.local ? " — " + t.local : "")].join("\n");
   }
   function dataToBlob(u) { return fetch(u).then(function (r) { return r.blob(); }); }

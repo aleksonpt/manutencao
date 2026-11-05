@@ -1,6 +1,6 @@
 /* Service worker: deixa o app abrir sem internet.
    Estratégia: rede primeiro, cópia salva se estiver offline. Troque CACHE a cada versão. */
-var CACHE = "manutencao-v1.8.1";
+var CACHE = "manutencao-v1.8.2";
 var SHELL = ["./", "index.html", "firebase-config.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", function (e) {
