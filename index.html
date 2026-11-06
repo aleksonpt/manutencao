@@ -427,7 +427,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 <script src="firebase-config.js"></script>
 <script>
 (function () {
-  var VERSION = "1.10.1";
+  var VERSION = "1.11";
   var KEY = "manutencao-quadro-v0";
   var OLD_DAYS = 30;
   var DEFAULT_COLS = [
@@ -489,6 +489,28 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     state.example = false; state.hideNotice = true; state.seed = SEED_VERSION;
   }
   if (!Array.isArray(state.events)) state.events = [];
+  /* tipos do calendário (editáveis em Configurar categorias) */
+  var EVC = ["var(--ev-limp)", "var(--ev-vis)", "var(--ev-out)", "#c2410c", "#7e3fb8", "#b8860b", "#0e7490", "#c0266d"];
+  var CATS = {};
+  function defTypes() { return [{ id: "limpeza", name: "Limpeza", c: 0 }, { id: "visita", name: "Visita técnica", c: 1 }, { id: "outros", name: "Outros", c: 2 }]; }
+  function cleanTypes(a) {
+    if (!Array.isArray(a)) return null;
+    var out = [], seen = {};
+    a.forEach(function (x) {
+      if (!x || typeof x.id !== "string" || !/^[\w-]{1,30}$/.test(x.id) || seen[x.id] || typeof x.name !== "string" || !x.name.trim() || out.length >= 20) return;
+      seen[x.id] = true; out.push({ id: x.id, name: x.name.trim().slice(0, 30), c: (+x.c >= 0 && +x.c < EVC.length) ? Math.floor(+x.c) : 2 });
+    });
+    if (!seen.outros) out.push({ id: "outros", name: "Outros", c: 2 });
+    return out.length ? out : null;
+  }
+  function syncCats() {
+    state.evTypes = cleanTypes(state.evTypes) || defTypes();
+    CATS = {}; state.evTypes.forEach(function (t) { CATS[t.id] = t.name; });
+    state.events.forEach(function (e) { if (!CATS[e.cat]) e.cat = "outros"; });
+  }
+  function evColor(k) { var t = state.evTypes.filter(function (x) { return x.id === k; })[0]; return EVC[t ? t.c : 2]; }
+  function typesCustom() { return JSON.stringify(state.evTypes) !== JSON.stringify(defTypes()); }
+  syncCats();
   function evNextId() { var m = 0; state.events.forEach(function (e) { var r = /^EV-(\d+)$/.exec(e.id || ""); if (r) m = Math.max(m, +r[1]); }); return "EV-" + (m + 1); }
   if (state.evSeed !== "1.4") {
     [{ title: "Limpeza de torre", start: "2026-10-08", end: "2026-10-09", cat: "limpeza" },
@@ -745,7 +767,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     return "﻿" + rows.map(function (r) { return r.map(csvCell).join(";"); }).join("\r\n");
   }
   function buildBackup() {
-    return JSON.stringify({ app: "programacao-manutencao", version: VERSION, exportedAt: new Date().toISOString(), next: state.next, cols: state.cols, tasks: state.tasks, events: state.events }, null, 2);
+    return JSON.stringify({ app: "programacao-manutencao", version: VERSION, exportedAt: new Date().toISOString(), next: state.next, cols: state.cols, tasks: state.tasks, events: state.events, evTypes: state.evTypes }, null, 2);
   }
   function showText(filename, text) {
     ui.databox = { mode: "text", filename: filename, text: text };
@@ -795,6 +817,8 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     });
     var next = Math.max(Number(o.next) || 1, max + 1);
     tasks.forEach(function (t) { if (!t.id) t.id = "OS-" + pad(next++); if (!t.done) delete t.doneAt; });
+    var evTypes = cleanTypes(o.evTypes);
+    var okCat = {}; (evTypes || defTypes()).forEach(function (t) { okCat[t.id] = true; });
     var events = null;
     if (Array.isArray(o.events)) {
       events = []; var eu = {};
@@ -803,12 +827,12 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
         var en = validDate(e.end) && e.end >= e.start ? e.end : e.start;
         var id = typeof e.id === "string" && /^EV-\d+$/.test(e.id) && !eu[e.id] ? e.id : null; if (id) eu[id] = true;
         events.push({ id: id, title: e.title.trim().slice(0, 120), start: e.start, end: en, time: typeof e.time === "string" && /^\d{2}:\d{2}$/.test(e.time) ? e.time : "",
-          cat: CATS[e.cat] ? e.cat : "outros", note: typeof e.note === "string" ? e.note.slice(0, 120) : "" });
+          cat: okCat[e.cat] ? e.cat : "outros", note: typeof e.note === "string" ? e.note.slice(0, 120) : "" });
       });
       var mx = 0; events.forEach(function (e) { if (e.id) mx = Math.max(mx, +e.id.slice(3)); });
       events.forEach(function (e) { if (!e.id) e.id = "EV-" + (++mx); });
     }
-    return { cols: cols, tasks: tasks, next: next, events: events };
+    return { cols: cols, tasks: tasks, next: next, events: events, evTypes: evTypes };
   }
   function readImport(file) {
     var reader = new FileReader();
@@ -823,7 +847,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     reader.readAsText(file);
   }
   function applyImport(d) {
-    state.cols = d.cols; state.tasks = d.tasks; state.next = d.next; if (d.events) { state.events = d.events; state.evSeed = "1.4"; ui.cal.form = null; } state.example = false; state.hideNotice = true;
+    state.cols = d.cols; state.tasks = d.tasks; state.next = d.next; if (d.events) { state.events = d.events; state.evSeed = "1.4"; ui.cal.form = null; } if (d.evTypes) state.evTypes = d.evTypes; syncCats(); state.example = false; state.hideNotice = true;
     ui.databox = null; ui.adding = null; ui.editing = null; ui.removing = null; ui.filter = null;
     save(); render();
     say("Dados importados: " + d.cols.length + " categorias e " + d.tasks.length + " tarefas.");
@@ -1040,7 +1064,6 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     paint(); renderChart();
   }
 
-  var CATS = { limpeza: "Limpeza", visita: "Visita técnica", outros: "Outros" };
   function monthTitle(ym) {
     var p = ym.split("-"), t = new Date(+p[0], +p[1] - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
     return t.charAt(0).toUpperCase() + t.slice(1);
@@ -1059,7 +1082,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     var start = h("input", { id: "ev-s", type: "date", required: "required", value: t.start });
     var end = h("input", { id: "ev-e", type: "date", value: t.end || t.start });
     var time = h("input", { id: "ev-h", type: "time", value: t.time || "" });
-    var cat = h("select", { id: "ev-c" }, Object.keys(CATS).map(function (k) { return h("option", { value: k, text: CATS[k], selected: k === t.cat ? "selected" : false }); }));
+    var cat = h("select", { id: "ev-c" }, Object.keys(CATS).map(function (k) { return h("option", { value: k, text: CATS[k], selected: k === (CATS[t.cat] ? t.cat : "outros") ? "selected" : false }); }));
     var note = h("input", { id: "ev-n", type: "text", maxlength: "120", value: t.note || "" });
     var actions = [];
     if (ev) actions.push(h("button", { class: "btn danger", type: "button", text: "Excluir", onclick: function () { state.events = state.events.filter(function (x) { return x.id !== ev.id; }); ui.cal.form = null; save(); render(); } }));
@@ -1105,19 +1128,19 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
         h("button", { class: "dn", type: "button", text: String(d), "aria-label": "Adicionar programação em " + fmtDate(iso), onclick: function (e) { e.stopPropagation(); openEv(null, iso); } })
       ]);
       list.slice(0, 3).forEach(function (e) {
-        cell.appendChild(h("button", { class: "chip cat-" + e.cat + (e.start !== iso ? " cont" : ""), type: "button", title: e.title + " · " + fmtRange(e) + (e.time ? " às " + e.time : ""),
+        cell.appendChild(h("button", { class: "chip cat-" + e.cat + (e.start !== iso ? " cont" : ""), style: "border-color:" + evColor(e.cat), type: "button", title: e.title + " · " + fmtRange(e) + (e.time ? " às " + e.time : ""),
           text: (e.time && e.start === iso ? e.time + " " : "") + e.title, onclick: function (ev) { ev.stopPropagation(); openEv(e); } }));
       });
       if (list.length > 3) cell.appendChild(h("span", { class: "more", text: "+" + (list.length - 3) + " mais" }));
       grid.appendChild(cell);
     })(d);
     box.appendChild(grid);
-    box.appendChild(h("div", { class: "cal-legend" }, Object.keys(CATS).map(function (k) { return h("span", null, [h("span", { class: "dot cat-" + k }), CATS[k]]); })));
+    box.appendChild(h("div", { class: "cal-legend" }, Object.keys(CATS).map(function (k) { return h("span", null, [h("span", { class: "dot", style: "border-color:" + evColor(k) }), CATS[k]]); })));
     function row(e) {
       return h("div", { class: "ev-row" }, [
         h("div", { class: "ev-main" }, [
-          h("div", { class: "ev-title" }, [h("span", { class: "dot cat-" + e.cat }), e.title]),
-          h("div", { class: "ev-meta", text: fmtRange(e) + (e.time ? " às " + e.time : "") + " · " + CATS[e.cat] + (e.note ? " · " + e.note : "") })
+          h("div", { class: "ev-title" }, [h("span", { class: "dot", style: "border-color:" + evColor(e.cat) }), e.title]),
+          h("div", { class: "ev-meta", text: fmtRange(e) + (e.time ? " às " + e.time : "") + " · " + (CATS[e.cat] || "Outros") + (e.note ? " · " + e.note : "") })
         ]),
         h("div", { class: "card-foot", style: "border:none;padding:0" }, [
           h("button", { class: "icon-btn", type: "button", text: "Editar", onclick: function () { openEv(e); } }),
@@ -1267,7 +1290,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     if (!ui.settings) return;
     box.appendChild(h("div", { class: "set-head" }, [
       h("h2", { text: "Categorias" }),
-      h("button", { class: "btn", type: "button", text: "Fechar", onclick: function () { ui.settings = false; ui.removing = null; render(); } })
+      h("button", { class: "btn", type: "button", text: "Fechar", onclick: function () { ui.settings = false; ui.removing = null; ui.removingType = null; render(); } })
     ]));
     box.appendChild(h("p", { class: "hint", text: "Cada categoria é uma coluna do quadro. Altere o nome ou o turno e a mudança vale ao sair do campo." }));
     var order = SHIFTS.map(function (s) { return s.id; });
@@ -1308,6 +1331,51 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       state.cols.push({ id: "c" + Date.now().toString(36), name: v, shift: newShift.value });
       save(); render();
     } }, [newName, newShift, h("button", { class: "btn primary", type: "submit", text: "Adicionar categoria" })]));
+    renderTypeSettings(box);
+  }
+  function renderTypeSettings(box) {
+    box.appendChild(h("h3", { text: "Tipos do calendário", style: "margin:14px 0 0;font-family:var(--font-display);font-size:1.25rem" }));
+    box.appendChild(h("p", { class: "hint", text: "Os tipos aparecem ao cadastrar uma programação e na legenda do calendário. Altere o nome e a mudança vale ao sair do campo. “Outros” é o tipo de reserva: pode ser renomeado, mas não removido." }));
+    state.evTypes.forEach(function (t) {
+      var count = state.events.filter(function (e) { return e.cat === t.id; }).length;
+      var name = h("input", { id: "tn-" + t.id, type: "text", value: t.name, maxlength: "30", "aria-label": "Nome do tipo", onchange: function (e) {
+        var v = e.target.value.trim(); if (v) { t.name = v; syncCats(); save(); } render();
+      } });
+      var protectedType = t.id === "outros";
+      var row = h("div", { class: "set-row" }, [
+        h("span", { class: "dot", style: "border-color:" + EVC[t.c] }),
+        name,
+        h("span", { class: "n", text: count + (count === 1 ? " programação" : " programações") }),
+        h("button", { class: "btn danger", type: "button", text: "Remover", disabled: protectedType ? "disabled" : false,
+          title: protectedType ? "O tipo Outros não pode ser removido" : false,
+          onclick: function () { if (count === 0) removeType(t.id); else { ui.removingType = t.id; render(); } } })
+      ]);
+      if (ui.removingType === t.id) {
+        row.appendChild(h("div", { class: "set-confirm" }, [
+          h("span", { text: count + (count === 1 ? " programação usa" : " programações usam") + " este tipo e " + (count === 1 ? "passará" : "passarão") + " para “Outros”. Remover mesmo assim?" }),
+          h("button", { class: "btn primary", type: "button", text: "Remover tipo", onclick: function () { removeType(t.id); } }),
+          h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { ui.removingType = null; render(); } })
+        ]));
+      }
+      box.appendChild(row);
+    });
+    var nn = h("input", { id: "tn-new", type: "text", placeholder: "Novo tipo, por exemplo Inspeção", maxlength: "30", "aria-label": "Nome do novo tipo" });
+    box.appendChild(h("form", { class: "set-row", onsubmit: function (e) {
+      e.preventDefault();
+      var v = nn.value.trim(); if (!v) return;
+      if (state.evTypes.length >= 20) { say("Limite de 20 tipos."); return; }
+      if (state.evTypes.some(function (x) { return x.name.toLowerCase() === v.toLowerCase(); })) { say("Já existe um tipo com esse nome."); return; }
+      var used = {}; state.evTypes.forEach(function (x) { used[x.c] = (used[x.c] || 0) + 1; });
+      var best = 3; for (var i = 3; i < EVC.length; i++) { if ((used[i] || 0) < (used[best] || 0)) best = i; }
+      state.evTypes.push({ id: "t" + Date.now().toString(36), name: v, c: best });
+      syncCats(); save(); render();
+    } }, [nn, h("button", { class: "btn primary", type: "submit", text: "Adicionar tipo" })]));
+  }
+  function removeType(id) {
+    if (id === "outros") return;
+    state.events.forEach(function (e) { if (e.cat === id) e.cat = "outros"; });
+    state.evTypes = state.evTypes.filter(function (t) { return t.id !== id; });
+    ui.removingType = null; syncCats(); save(); render();
   }
 
   document.getElementById("hoje").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -1360,6 +1428,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     cloud.timer = setTimeout(function () {
       var fb = cloud.fb;
       var data = JSON.parse(JSON.stringify({ cols: state.cols, tasks: state.tasks, events: state.events, next: state.next, seed: state.seed || "", evSeed: state.evSeed || "", v: VERSION, by: CLIENT }));
+      if (typesCustom()) data.evTypes = JSON.parse(JSON.stringify(state.evTypes));
       data.updatedAt = fb.serverTimestamp();
       cloudStatus("Salvando na nuvem…", "wait");
       Promise.resolve(fb.setDoc(cloud.ref, data)).then(
@@ -1372,6 +1441,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     var n = normalizeBackup(d);
     if (!n) return;
     state.cols = n.cols; state.tasks = n.tasks; state.next = n.next; state.events = n.events || [];
+    state.evTypes = n.evTypes || defTypes(); syncCats();
     state.seed = SEED_VERSION; state.evSeed = "1.4"; state.example = false; state.hideNotice = true;
     if (ui.editing && !state.tasks.some(function (t) { return t.id === ui.editing; })) ui.editing = null;
     if (ui.adding && !state.cols.some(function (c) { return c.id === ui.adding; })) ui.adding = null;
