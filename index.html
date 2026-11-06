@@ -282,6 +282,8 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 /* Computador: a partir de 900 px o quadro ocupa a largura da janela, sem rolagem lateral. Celular não muda. */
 @media (min-width: 900px) {
   body { padding-inline: 28px; }
+  header .title-row { flex: 1 1 100%; justify-content: space-between; align-items: flex-start; }
+  header .icons { flex-direction: row; margin-left: auto; }
   .wrap { max-width: 1480px; }
   .board { flex-wrap: wrap; overflow-x: visible; gap: 22px 18px; }
   .shift { flex: var(--n, 1) 1 calc(var(--n, 1) * 180px + (var(--n, 1) - 1) * 10px); min-width: 0; max-width: calc(var(--n, 1) * 330px + (var(--n, 1) - 1) * 10px); }
@@ -404,7 +406,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 <script src="firebase-config.js"></script>
 <script>
 (function () {
-  var VERSION = "1.8.2";
+  var VERSION = "1.9";
   var KEY = "manutencao-quadro-v0";
   var OLD_DAYS = 30;
   var DEFAULT_COLS = [
@@ -1292,6 +1294,14 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   var CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
   var FOTO_MAX = 4;
   var DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+  var LOGIN_SCOPE = "openid email profile " + DRIVE_SCOPE;
+  var TOK_KEY = "manutencao-dtok";
+  function tokSave(tok, exp) { try { localStorage.setItem(TOK_KEY, JSON.stringify({ e: cloud.user ? cloud.user.email : "", t: tok, x: exp })); } catch (e) {} }
+  function tokLoad() {
+    try { var o = JSON.parse(localStorage.getItem(TOK_KEY) || "null"); if (o && o.t && o.x > Date.now() + 60000 && cloud.user && o.e === cloud.user.email) return o; } catch (e) {}
+    return null;
+  }
+  function tokClear() { drv.tok = null; drv.exp = 0; try { localStorage.removeItem(TOK_KEY); } catch (e) {} }
   var DAPI = "https://www.googleapis.com/drive/v3/";
   var cloud = { fb: null, app: null, db: null, ref: null, unsub: null, timer: null, ready: false, auth: null, user: null, admin: false, granted: false, accUnsub: null, subs: [], cfg: {}, fotos: [], users: [], reqs: [] };
   var drv = { tok: null, exp: 0, client: null, cb: null, eb: null, scripts: {} };
@@ -1399,6 +1409,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     }
     cloud.user = { email: String(u.email || "").toLowerCase(), name: u.displayName || u.email || "" };
     cloud.admin = !!ADMIN && cloud.user.email === ADMIN;
+    if (!drv.tok) { var sv = tokLoad(); if (sv) { drv.tok = sv.t; drv.exp = sv.x; } }
     if (cloud.admin) { grant(); return; }
     cloudStatus("Verificando acesso…", "wait");
     cloud.accUnsub = fb.onSnapshot(fb.doc(cloud.db, "usuarios", cloud.user.email), function (snap) {
@@ -1427,18 +1438,45 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       var path = (CFG.docPath || "manutencao/quadro").split("/");
       cloud.ref = fb.doc(db, path[0], path[1]);
       cloud.auth = fb.getAuth(cloud.app);
+      function popupLogin() {
+        var p = new fb.GoogleAuthProvider();
+        return fb.signInWithPopup(cloud.auth, p);
+      }
+      function loginFail(e) { showLogin(true, "Não foi possível entrar (" + ((e && e.code) || (e && e.message) || "erro") + ").", false); }
       document.getElementById("login-btn").addEventListener("click", function () {
-        fb.signInWithPopup(cloud.auth, new fb.GoogleAuthProvider()).catch(function (e) { showLogin(true, "Não foi possível entrar (" + ((e && e.code) || "erro") + ").", false); });
+        var g = window.google && window.google.accounts && window.google.accounts.oauth2;
+        if (!driveEnabled() || !g || (window.__FB_MOCK && !window.__GIS_TEST)) { popupLogin().catch(loginFail); return; }
+        /* uma única janela do Google: entra no app e já autoriza o Drive */
+        var done = false;
+        function fallback() { if (done) return; done = true; popupLogin().catch(loginFail); }
+        try {
+          if (!drv.client) drv.client = g.initTokenClient({ client_id: CFG.drive.clientId, scope: LOGIN_SCOPE,
+            callback: function (r) { drv.cb(r); }, error_callback: function (e) { drv.eb(e); } });
+          drv.cb = function (r) {
+            if (done) return;
+            if (!(r && r.access_token)) { fallback(); return; }
+            done = true;
+            var tok = r.access_token, exp = Date.now() + (+r.expires_in || 3600) * 1000;
+            Promise.resolve(fb.signInWithCredential(cloud.auth, fb.GoogleAuthProvider.credential(null, tok))).then(function () {
+              drv.tok = tok; drv.exp = exp; tokSave(tok, exp);
+            }, function (e) { popupLogin().catch(loginFail); });
+          };
+          drv.eb = function (e) { if (e && e.type === "popup_closed") { done = true; return; } fallback(); };
+          drv.client.requestAccessToken({ prompt: "select_account" });
+        } catch (e) { fallback(); }
       });
       function out() {
-        drv.tok = null;
+        tokClear();
         if (!cloud.admin) { try { localStorage.removeItem(KEY); } catch (e) {} state.tasks = []; state.events = []; render(); }
         fb.signOut(cloud.auth);
       }
       document.getElementById("login-out").addEventListener("click", out);
       document.getElementById("sair").addEventListener("click", out);
-      showLogin(true, "", false);
-      fb.onAuthStateChanged(cloud.auth, onUser);
+      /* mantém o login salvo no aparelho; a tela de entrada só aparece se realmente não houver login */
+      var persist = Promise.resolve();
+      try { if (fb.setPersistence) persist = Promise.resolve(fb.setPersistence(cloud.auth, fb.indexedDBLocalPersistence || fb.browserLocalPersistence)).catch(function () { return fb.setPersistence(cloud.auth, fb.browserLocalPersistence); }).catch(function () {}); } catch (e) {}
+      if (driveEnabled()) loadGis().catch(function () {});
+      persist.then(function () { fb.onAuthStateChanged(cloud.auth, onUser); });
     }).catch(function () { cloudStatus("Nuvem indisponível. Os dados continuam salvos neste aparelho.", "err"); });
   }
 
@@ -1528,12 +1566,14 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   function driveToken() {
     if (window.__DRIVE_TOKEN) return Promise.resolve(window.__DRIVE_TOKEN);
     if (drv.tok && Date.now() < drv.exp - 60000) return Promise.resolve(drv.tok);
+    var saved = tokLoad();
+    if (saved) { drv.tok = saved.t; drv.exp = saved.x; return Promise.resolve(drv.tok); }
     return loadGis().then(function () {
       return new Promise(function (ok, bad) {
-        if (!drv.client) drv.client = window.google.accounts.oauth2.initTokenClient({ client_id: CFG.drive.clientId, scope: DRIVE_SCOPE,
+        if (!drv.client) drv.client = window.google.accounts.oauth2.initTokenClient({ client_id: CFG.drive.clientId, scope: LOGIN_SCOPE,
           callback: function (r) { drv.cb(r); }, error_callback: function (e) { drv.eb(e); } });
         drv.cb = function (r) {
-          if (r && r.access_token) { drv.tok = r.access_token; drv.exp = Date.now() + (+r.expires_in || 3600) * 1000; ok(drv.tok); }
+          if (r && r.access_token) { drv.tok = r.access_token; drv.exp = Date.now() + (+r.expires_in || 3600) * 1000; tokSave(drv.tok, drv.exp); ok(drv.tok); }
           else bad(new Error((r && r.error) || "token"));
         };
         drv.eb = function (e) { bad(new Error((e && e.type) || "popup")); };
@@ -1546,7 +1586,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       opts = opts || {};
       opts.headers = Object.assign({}, opts.headers, { Authorization: "Bearer " + tok });
       return fetch(url, opts).then(function (r) {
-        if (r.status === 401) drv.tok = null;
+        if (r.status === 401) tokClear();
         if (!r.ok) { var e = new Error("drive " + r.status); e.status = r.status; throw e; }
         return r.status === 204 ? null : r.json();
       });
@@ -1561,6 +1601,19 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     return "Não foi possível falar com o Drive (" + (st || m || "erro") + ").";
   }
   function driveUpload(blob, name, desc) {
+    var n = 0;
+    function go() {
+      return driveUpload1(blob, name, desc).catch(function (e) {
+        var st = e && e.status;
+        var again = (!st || st >= 500 || st === 429 || st === 401) && n < 2 && !/popup|cancel|access_denied/.test((e && e.message) || "");
+        if (!again) throw e;
+        n++;
+        return new Promise(function (r) { setTimeout(r, 700 * n); }).then(go);
+      });
+    }
+    return go();
+  }
+  function driveUpload1(blob, name, desc) {
     var meta = { name: name, parents: [cloud.cfg.driveFolderId], mimeType: "image/jpeg", description: desc || "" };
     var b = "mnt" + Math.random().toString(36).slice(2) + Date.now();
     var body = new Blob(["--" + b + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify(meta) + "\r\n--" + b + "\r\nContent-Type: image/jpeg\r\n\r\n", blob, "\r\n--" + b + "--"]);
