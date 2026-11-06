@@ -96,15 +96,36 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; line
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 9px 10px 8px 12px; display: flex; flex-direction: column; gap: 6px; position: relative; cursor: grab; }
 .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--lo); border-radius: 4px 0 0 4px; }
-.card.p-alta::before { background: var(--hi); }
-.card.p-media::before { background: var(--mid); }
+.card.p-rb::before { background: var(--lo); }
+.card.p-rc::before { background: var(--mid); }
+.card.p-db::before { background: var(--accent); }
+.card.p-dc::before { background: var(--hi); }
+.card.p-sem::before { background: var(--line); }
 .card.dragging { opacity: 0.4; }
 .card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .os { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 .pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
-.pill.alta { background: var(--hi-soft); color: var(--hi); }
-.pill.media { background: var(--mid-soft); color: var(--mid); }
-.pill.baixa { background: var(--lo-soft); color: var(--lo); }
+.pill { white-space: nowrap; letter-spacing: 0.03em; }
+.pill.rb { background: var(--lo-soft); color: var(--lo); }
+.pill.rc { background: var(--mid-soft); color: var(--mid); }
+.pill.db { background: var(--accent-soft); color: var(--accent); }
+.pill.dc { background: var(--hi-soft); color: var(--hi); }
+.pill.sem { background: var(--col); color: var(--muted); }
+.stat-sel { cursor: pointer; }
+.stat-sel:focus-within { border-color: var(--accent); }
+.stat-sel[data-on="1"] { background: var(--accent-soft); border-color: var(--accent); }
+.stat-sel select { background: transparent; border: none; color: inherit; font: inherit; font-size: 13px; max-width: 150px; text-overflow: ellipsis; cursor: pointer; padding: 0; min-width: 0; }
+.stat-sel select:focus { outline: none; }
+.stat-sel option { color: #1d2523; background: #fbfbf9; }
+.stat-sel[data-on="0"] b { display: none; }
+.sel-ic { display: none; }
+.sel-ic svg { width: 16px; height: 16px; }
+@media (max-width: 480px) {
+  .stat-sel { position: relative; flex: 0 0 auto; justify-content: center; padding-inline: 10px; min-width: 40px; }
+  .stat-sel select { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; opacity: 0; }
+  .sel-ic { display: inline-flex; }
+  .stat-sel[data-on="0"] b { display: none; }
+}
 .card h3 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
 .meta { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--muted); font-size: 12.5px; min-width: 0; }
 .meta .old, .card h3.old { color: var(--old); font-weight: 700; }
@@ -406,7 +427,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 <script src="firebase-config.js"></script>
 <script>
 (function () {
-  var VERSION = "1.9";
+  var VERSION = "1.10.1";
   var KEY = "manutencao-quadro-v0";
   var OLD_DAYS = 30;
   var DEFAULT_COLS = [
@@ -423,7 +444,10 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     { id: "noite", name: "Turno noite" },
     { id: "todos", name: "Todos os turnos" }
   ];
-  var PRIO = { alta: "Alta", media: "Média", baixa: "Baixa" };
+  var PRIO = { rb: "Rápido e barato", rc: "Rápido e caro", db: "Demorado e barato", dc: "Demorado e caro" };
+  var SEM = "Sem classificação";
+  function prioLabel(p) { return PRIO[p] || SEM; }
+  function prioKey(p) { return PRIO[p] ? p : "sem"; }
 
   function iso(offset) {
     var d = new Date(); d.setDate(d.getDate() + offset);
@@ -460,7 +484,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     SEED_TASKS.forEach(function (r) {
       if (!state.cols.some(function (c) { return c.id === r.col; })) return;
       var dup = state.tasks.some(function (t) { return t.col === r.col && t.title === r.title && !t.done; });
-      if (!dup) state.tasks.push({ id: "OS-" + pad(state.next++), col: r.col, title: r.title, prio: "media", local: "", created: SEED_DATE });
+      if (!dup) state.tasks.push({ id: "OS-" + pad(state.next++), col: r.col, title: r.title, prio: "", local: "", created: SEED_DATE });
     });
     state.example = false; state.hideNotice = true; state.seed = SEED_VERSION;
   }
@@ -476,7 +500,26 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   }
   state.ver = VERSION;
   var ui = { adding: null, editing: null, settings: false, removing: null, filter: null, view: "quadro", wopen: false, wmode: "ambos", cal: { month: todayIso.slice(0, 7), form: null }, dash: { status: "todas", from: null, to: null } };
-  function matches(t) { return !t.done && (!ui.filter || (ui.filter === "alta" ? t.prio === "alta" : daysOpen(t.created) > OLD_DAYS)); }
+  function matches(t) {
+    if (t.done) return false;
+    if (!ui.filter) return true;
+    if (ui.filter === "old") return daysOpen(t.created) > OLD_DAYS;
+    if (ui.filter.indexOf("p:") === 0) return prioKey(t.prio) === ui.filter.slice(2);
+    return true;
+  }
+  function prioFilter(openTasks) {
+    var cur = ui.view === "quadro" && ui.filter && ui.filter.indexOf("p:") === 0 ? ui.filter.slice(2) : "";
+    var cnt = function (k) { return openTasks.filter(function (t) { return prioKey(t.prio) === k; }).length; };
+    var opts = [h("option", { value: "", text: "Tempo × custo", selected: !cur ? "selected" : false })]
+      .concat(Object.keys(PRIO).concat(["sem"]).map(function (k) {
+        return h("option", { value: k, text: (PRIO[k] || SEM) + " (" + cnt(k) + ")", selected: cur === k ? "selected" : false });
+      }));
+    var sel = h("select", { "aria-label": "Filtrar por tempo e custo" }, opts);
+    sel.addEventListener("change", function () { ui.view = "quadro"; ui.filter = sel.value ? "p:" + sel.value : null; render(); });
+    var ic = h("span", { class: "sel-ic", "aria-hidden": "true" });
+    ic.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
+    return h("label", { class: "stat stat-sel", "data-on": cur ? "1" : "0", title: "Filtrar tarefas por tempo × custo" }, [ic, h("b", { text: cur ? String(cnt(cur)) : "—" }), sel]);
+  }
   function setFilter(f) { ui.filter = ui.filter === f ? null : f; render(); }
 
   function localSave() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -506,10 +549,11 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 
   function formFor(task, colId) {
     var isNew = !task;
-    var t = task || { title: "", prio: "media", local: "" };
+    var t = task || { title: "", prio: "", local: "" };
     var uid = (isNew ? "new-" + colId : task.id);
     var title = h("input", { id: "t-" + uid, type: "text", required: "required", value: t.title, maxlength: "120" });
-    var prio = h("select", { id: "p-" + uid }, Object.keys(PRIO).map(function (k) { return h("option", { value: k, text: PRIO[k], selected: k === t.prio ? "selected" : false }); }));
+    var prio = h("select", { id: "p-" + uid, required: isNew ? "required" : false },
+      [h("option", { value: "", text: isNew ? "Selecione…" : SEM, selected: !PRIO[t.prio] ? "selected" : false })].concat(Object.keys(PRIO).map(function (k) { return h("option", { value: k, text: PRIO[k], selected: k === t.prio ? "selected" : false }); })));
     var local = h("input", { id: "l-" + uid, type: "text", value: t.local, maxlength: "60" });
     var form = h("form", { class: "edit", onsubmit: function (e) {
       e.preventDefault();
@@ -522,7 +566,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       ui.adding = null; ui.editing = null; save(); render();
     } }, [
       h("label", { for: title.id }, ["Tarefa", title]),
-      h("label", { for: prio.id }, ["Prioridade", prio]),
+      h("label", { for: prio.id }, ["Tempo × custo", prio]),
       h("label", { for: local.id }, ["Local", local]),
       h("div", { class: "actions" }, [
         h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { ui.adding = null; ui.editing = null; render(); } }),
@@ -542,8 +586,8 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     meta.push(h("span", { class: days > OLD_DAYS ? "old" : "", text: daysLabel(days) }));
     var sel = h("select", { "aria-label": "Mover " + task.id + " para", onchange: function (e) { moveTo(task.id, e.target.value, null); } },
       [h("option", { value: "", text: "Mover para…" })].concat(state.cols.filter(function (c) { return c.id !== task.col; }).map(function (c) { return h("option", { value: c.id, text: colLabel(c) }); })));
-    var card = h("article", { class: "card p-" + task.prio, draggable: "true", "data-id": task.id }, [
-      h("div", { class: "card-top" }, [h("span", { class: "os", text: task.id }), h("span", { class: "pill " + task.prio, text: PRIO[task.prio] })]),
+    var card = h("article", { class: "card p-" + prioKey(task.prio), draggable: "true", "data-id": task.id }, [
+      h("div", { class: "card-top" }, [h("span", { class: "os", text: task.id }), h("span", { class: "pill " + prioKey(task.prio), text: prioLabel(task.prio) })]),
       h("h3", { class: days > OLD_DAYS ? "old" : "", text: task.title }),
       meta.length ? h("div", { class: "meta" }, meta) : null,
       photosRow(task),
@@ -636,14 +680,13 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     var openTasks = state.tasks.filter(function (t) { return !t.done; });
     var doneCount = state.tasks.length - openTasks.length;
     var total = openTasks.length;
-    var alta = openTasks.filter(function (t) { return t.prio === "alta"; }).length;
     var late = openTasks.filter(function (t) { return daysOpen(t.created) > OLD_DAYS; }).length;
     var st = document.getElementById("stats"); st.textContent = "";
     [
       { f: null, n: total, label: "tarefas", full: "todas as tarefas em aberto", cls: "stat" },
-      { f: "alta", n: alta, label: "alta", full: "tarefas de prioridade alta", cls: "stat" },
       { f: "old", n: late, label: "+" + OLD_DAYS + " dias", full: "tarefas abertas há mais de " + OLD_DAYS + " dias", cls: "stat old" }
-    ].forEach(function (s) {
+    ].forEach(function (s, i) {
+      if (i === 1) st.appendChild(prioFilter(openTasks));
       st.appendChild(h("button", { class: s.cls, type: "button", title: s.n + " " + s.full, "aria-label": s.n + " " + s.full, "aria-pressed": (ui.view === "quadro" && ui.filter === s.f) ? "true" : "false",
         onclick: function () {
           var was = ui.view; ui.view = "quadro";
@@ -689,7 +732,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       state.cols.filter(function (c) { return c.shift === s.id; }).forEach(function (c) {
         var ts = state.tasks.filter(function (t) { return t.col === c.id; });
         ts.filter(function (t) { return !t.done; }).concat(ts.filter(function (t) { return t.done; })).forEach(function (t) {
-          rows.push([c.name, s.name, t.done ? "Realizada" : "Em aberto", t.title, t.local || "", PRIO[t.prio] || t.prio,
+          rows.push([c.name, s.name, t.done ? "Realizada" : "Em aberto", t.title, t.local || "", prioLabel(t.prio),
             fmtDate(t.created), t.done ? "" : daysOpen(t.created), t.done ? fmtDate(t.doneAt || todayIso) : ""]);
         });
       });
@@ -746,7 +789,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       if (!t || !seen[t.col] || typeof t.title !== "string" || !t.title.trim()) return;
       var id = typeof t.id === "string" && t.id && !used[t.id] ? t.id.slice(0, 20) : null;
       if (id) { used[id] = true; var m = /^OS-(\d+)$/.exec(id); if (m) max = Math.max(max, +m[1]); }
-      tasks.push({ id: id, col: t.col, title: t.title.trim().slice(0, 120), prio: PRIO[t.prio] ? t.prio : "media",
+      tasks.push({ id: id, col: t.col, title: t.title.trim().slice(0, 120), prio: PRIO[t.prio] ? t.prio : "",
         local: typeof t.local === "string" ? t.local.slice(0, 60) : "", created: validDate(t.created) ? t.created : todayIso,
         done: t.done === true, doneAt: t.done === true ? (validDate(t.doneAt) ? t.doneAt : todayIso) : undefined });
     });
@@ -1514,7 +1557,11 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     render();
   }
   function addPhoto(task) {
-    if (!driveConnected()) { ui.sheet = { kind: "drive", msg: cloud.cfg.driveFolderId ? "Conecte-se à pasta de fotos antes de enviar fotos." : "A administradora ainda não criou a pasta de fotos." }; render(); return; }
+    if (!driveConnected()) {
+      if (!cloud.cfg.driveFolderId) { ui.sheet = { kind: "drive", msg: "A administradora ainda não criou a pasta de fotos." }; render(); return; }
+      checkFolder("Pasta conectada neste aparelho. Toque em Foto de novo para enviar.", "Conecte-se à pasta de fotos antes de enviar fotos.");
+      return;
+    }
     if (fotosOf(task.id).length >= FOTO_MAX) { ui.sheet = { kind: "aviso", msg: "Esta tarefa já tem " + FOTO_MAX + " fotos. Apague uma para enviar outra." }; render(); return; }
     ui.fotoTask = task;
     document.getElementById("foto-file").click();
@@ -1552,6 +1599,23 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     var id = cloud.cfg && cloud.cfg.driveFolderId;
     if (!id) return false;
     try { return localStorage.getItem(flagKey()) === id; } catch (e) { return false; }
+  }
+  /* tenta reconhecer a pasta sozinho: quem criou a pasta (ou já tem acesso a ela) fica conectado sem usar o seletor */
+  function autoConnect() {
+    var id = cloud.cfg && cloud.cfg.driveFolderId;
+    if (!id || !driveEnabled()) return Promise.resolve(false);
+    if (driveConnected()) return Promise.resolve(true);
+    return driveFetch(DAPI + "files/" + encodeURIComponent(id) + "?fields=id,trashed").then(function (f) {
+      if (f && f.id === id && !f.trashed) { setConnected(id); return true; }
+      return false;
+    }, function () { return false; });
+  }
+  function checkFolder(msgOk, msgNo) {
+    var s = ui.sheet = { kind: "drive", msg: "Verificando a pasta…" }; render();
+    autoConnect().then(function (ok) {
+      if (ui.sheet !== s) return;
+      s.msg = ok ? msgOk : msgNo; render();
+    });
   }
   function setConnected(id) { try { localStorage.setItem(flagKey(), id); } catch (e) {} }
   function loadScript(src) {
@@ -1763,7 +1827,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
         });
       } }));
     }
-    if (!cloud.admin && id && !conn) {
+    if (id && !conn) {
       acts.push(h("button", { class: "btn primary", type: "button", text: "Conectar à pasta (escolher no Drive)", onclick: function () {
         pickFolder().then(function (d) {
           if (d && d.id === id) { setConnected(id); note(s, "Conectado à pasta de fotos."); }
@@ -1913,7 +1977,10 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   }
 
   document.getElementById("usuarios").addEventListener("click", function () { ui.sheet = { kind: "users" }; render(); });
-  document.getElementById("drive").addEventListener("click", function () { ui.sheet = { kind: "drive" }; render(); });
+  document.getElementById("drive").addEventListener("click", function () {
+    if (cloud.cfg && cloud.cfg.driveFolderId && !driveConnected() && driveEnabled()) checkFolder("Pasta de fotos conectada automaticamente neste aparelho.", "");
+    else { ui.sheet = { kind: "drive" }; render(); }
+  });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && ui.sheet) closeSheet(); });
 
   window.addEventListener("offline", function () { if (cloud.ref) cloudStatus("Sem conexão: as alterações ficam salvas neste aparelho e sobem quando voltar a internet", "wait"); });
