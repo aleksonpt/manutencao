@@ -279,6 +279,16 @@ header > .stats { flex: 1 1 100%; justify-content: center; align-items: center; 
 .ev-meta { color: var(--muted); font-size: 12.5px; }
 .ev-list details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; padding-top: 8px; }
 form.ev-form { max-width: 560px; }
+#func { max-width: 1100px; }
+.func-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 10px; }
+.func-card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.func-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.func-name { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+.func-meta { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.func-meta a { color: var(--accent); }
+.badge-fer { background: var(--mid-soft); color: var(--mid); font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.fer-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: end; }
+form.func-form { max-width: 640px; margin-top: 10px; }
 form.ev-form .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 form.ev-form .row3 label { min-width: 0; }
 form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
@@ -392,6 +402,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   <section id="done" aria-label="Tarefas realizadas" hidden></section>
   <section id="dash" aria-label="Dashboards" hidden></section>
   <section id="cal" aria-label="Calendário de programações" hidden></section>
+  <section id="func" aria-label="Funcionários" hidden></section>
   <section class="databox" id="databox" aria-label="Importar ou exportar dados" hidden></section>
   <div class="modal" id="wmodal" role="dialog" aria-modal="true" aria-label="Enviar por WhatsApp" hidden></div>
   <div class="modal block" id="login" role="dialog" aria-modal="true" aria-label="Entrar" hidden>
@@ -427,7 +438,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 <script src="firebase-config.js"></script>
 <script>
 (function () {
-  var VERSION = "1.11";
+  var VERSION = "1.12";
   var KEY = "manutencao-quadro-v0";
   var OLD_DAYS = 30;
   var DEFAULT_COLS = [
@@ -508,9 +519,54 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     CATS = {}; state.evTypes.forEach(function (t) { CATS[t.id] = t.name; });
     state.events.forEach(function (e) { if (!CATS[e.cat]) e.cat = "outros"; });
   }
-  function evColor(k) { var t = state.evTypes.filter(function (x) { return x.id === k; })[0]; return EVC[t ? t.c : 2]; }
+  function evColor(k) { if (k === "__ferias") return FERC; var t = state.evTypes.filter(function (x) { return x.id === k; })[0]; return EVC[t ? t.c : 2]; }
   function typesCustom() { return JSON.stringify(state.evTypes) !== JSON.stringify(defTypes()); }
   syncCats();
+  /* funcionários: dados pessoais ficam só com a administradora; as férias (nome e período) vão para o calendário de todos */
+  function cleanFunc(a) {
+    if (!Array.isArray(a)) return null;
+    var out = [], seen = {}, hhmm = /^\d{2}:\d{2}$/;
+    a.forEach(function (x) {
+      if (!x || typeof x.nome !== "string" || !x.nome.trim() || out.length >= 200) return;
+      var id = typeof x.id === "string" && /^[\w-]{1,30}$/.test(x.id) && !seen[x.id] ? x.id : "F" + Date.now().toString(36) + out.length;
+      seen[id] = true;
+      var fer = [];
+      (Array.isArray(x.ferias) ? x.ferias : []).forEach(function (f) {
+        if (!f || !validDate(f.ini) || fer.length >= 24) return;
+        fer.push({ ini: f.ini, fim: validDate(f.fim) && f.fim >= f.ini ? f.fim : f.ini });
+      });
+      fer.sort(function (a, b) { return a.ini.localeCompare(b.ini); });
+      out.push({ id: id, nome: x.nome.trim().slice(0, 60), cargo: String(x.cargo || "").trim().slice(0, 40), contato: String(x.contato || "").trim().slice(0, 40),
+        entrada: hhmm.test(x.entrada) ? x.entrada : "", saida: hhmm.test(x.saida) ? x.saida : "",
+        contratacao: validDate(x.contratacao) ? x.contratacao : "", aniversario: validDate(x.aniversario) ? x.aniversario : "", ferias: fer });
+    });
+    return out;
+  }
+  function cleanFerias(a) {
+    if (!Array.isArray(a)) return null;
+    var out = [];
+    a.forEach(function (f) {
+      if (!f || typeof f.nome !== "string" || !f.nome.trim() || !validDate(f.ini) || out.length >= 400) return;
+      out.push({ id: String(f.id || out.length).slice(0, 40), nome: f.nome.trim().slice(0, 60), ini: f.ini, fim: validDate(f.fim) && f.fim >= f.ini ? f.fim : f.ini });
+    });
+    return out;
+  }
+  function deriveFerias() {
+    var out = [];
+    (state.funcionarios || []).forEach(function (f) { f.ferias.forEach(function (p, i) { out.push({ id: f.id + "-" + i, nome: f.nome, ini: p.ini, fim: p.fim }); }); });
+    return out;
+  }
+  state.funcionarios = cleanFunc(state.funcionarios) || [];
+  state.ferias = state.funcionarios.length ? deriveFerias() : (cleanFerias(state.ferias) || []);
+  function cloudOn() { return !!(CFG.firebase && CFG.firebase.apiKey); }
+  function canFunc() { return !cloudOn() || !!cloud.admin; }
+  var FERC = "#d6336c";
+  function sortedTypes() { return state.evTypes.slice().sort(function (a, b) { return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }); }); }
+  function catName(k) { return k === "__ferias" ? "Férias" : (CATS[k] || "Outros"); }
+  function feriasEvents() {
+    return (state.ferias || []).map(function (f) { return { id: "FE:" + f.id, title: "Férias – " + f.nome, start: f.ini, end: f.fim, time: "", cat: "__ferias", note: "", ro: true }; });
+  }
+  function allEvents() { return state.events.concat(feriasEvents()); }
   function evNextId() { var m = 0; state.events.forEach(function (e) { var r = /^EV-(\d+)$/.exec(e.id || ""); if (r) m = Math.max(m, +r[1]); }); return "EV-" + (m + 1); }
   if (state.evSeed !== "1.4") {
     [{ title: "Limpeza de torre", start: "2026-10-08", end: "2026-10-09", cat: "limpeza" },
@@ -521,7 +577,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     state.evSeed = "1.4";
   }
   state.ver = VERSION;
-  var ui = { adding: null, editing: null, settings: false, removing: null, filter: null, view: "quadro", wopen: false, wmode: "ambos", cal: { month: todayIso.slice(0, 7), form: null }, dash: { status: "todas", from: null, to: null } };
+  var ui = { adding: null, editing: null, settings: false, removing: null, filter: null, view: "quadro", wopen: false, wmode: "ambos", cal: { month: todayIso.slice(0, 7), form: null }, dash: { status: "todas", from: null, to: null }, func: { draft: null, editId: null, removing: null } };
   function matches(t) {
     if (t.done) return false;
     if (!ui.filter) return true;
@@ -545,7 +601,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   function setFilter(f) { ui.filter = ui.filter === f ? null : f; render(); }
 
   function localSave() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
-  function save() { localSave(); cloudPush(); }
+  function save() { localSave(); cloudPush(); funcPush(); }
 
   function h(tag, attrs, kids) {
     var el = document.createElement(tag);
@@ -686,6 +742,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   }
 
   function render() {
+    if (ui.view === "funcionarios" && !canFunc()) ui.view = "quadro";
     var board = document.getElementById("board");
     board.textContent = "";
     SHIFTS.forEach(function (s) {
@@ -730,10 +787,12 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     document.getElementById("done").hidden = v !== "realizadas";
     document.getElementById("dash").hidden = v !== "dashboards";
     document.getElementById("cal").hidden = v !== "calendario";
+    document.getElementById("func").hidden = v !== "funcionarios";
     renderTabs(openTasks.length, doneCount);
     if (v === "realizadas") renderDone();
     if (v === "dashboards") renderDash();
     if (v === "calendario") renderCal();
+    if (v === "funcionarios") renderFunc();
     renderWModal();
     renderSettings();
     updateWhats();
@@ -767,7 +826,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     return "﻿" + rows.map(function (r) { return r.map(csvCell).join(";"); }).join("\r\n");
   }
   function buildBackup() {
-    return JSON.stringify({ app: "programacao-manutencao", version: VERSION, exportedAt: new Date().toISOString(), next: state.next, cols: state.cols, tasks: state.tasks, events: state.events, evTypes: state.evTypes }, null, 2);
+    return JSON.stringify({ app: "programacao-manutencao", version: VERSION, exportedAt: new Date().toISOString(), next: state.next, cols: state.cols, tasks: state.tasks, events: state.events, evTypes: state.evTypes, funcionarios: canFunc() ? state.funcionarios : undefined }, null, 2);
   }
   function showText(filename, text) {
     ui.databox = { mode: "text", filename: filename, text: text };
@@ -832,7 +891,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       var mx = 0; events.forEach(function (e) { if (e.id) mx = Math.max(mx, +e.id.slice(3)); });
       events.forEach(function (e) { if (!e.id) e.id = "EV-" + (++mx); });
     }
-    return { cols: cols, tasks: tasks, next: next, events: events, evTypes: evTypes };
+    return { cols: cols, tasks: tasks, next: next, events: events, evTypes: evTypes, funcionarios: cleanFunc(o.funcionarios), ferias: cleanFerias(o.ferias) };
   }
   function readImport(file) {
     var reader = new FileReader();
@@ -847,7 +906,8 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     reader.readAsText(file);
   }
   function applyImport(d) {
-    state.cols = d.cols; state.tasks = d.tasks; state.next = d.next; if (d.events) { state.events = d.events; state.evSeed = "1.4"; ui.cal.form = null; } if (d.evTypes) state.evTypes = d.evTypes; syncCats(); state.example = false; state.hideNotice = true;
+    state.cols = d.cols; state.tasks = d.tasks; state.next = d.next; if (d.events) { state.events = d.events; state.evSeed = "1.4"; ui.cal.form = null; } if (d.evTypes) state.evTypes = d.evTypes; syncCats();
+    if (d.funcionarios && canFunc()) { state.funcionarios = d.funcionarios; state.ferias = deriveFerias(); } state.example = false; state.hideNotice = true;
     ui.databox = null; ui.adding = null; ui.editing = null; ui.removing = null; ui.filter = null;
     save(); render();
     say("Dados importados: " + d.cols.length + " categorias e " + d.tasks.length + " tarefas.");
@@ -1070,10 +1130,13 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   }
   function shiftMonth(n) { var p = ui.cal.month.split("-"), d = new Date(+p[0], +p[1] - 1 + n, 1); ui.cal.month = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
   function evOn(iso) {
-    return state.events.filter(function (e) { return e.start <= iso && iso <= (e.end || e.start); })
+    return allEvents().filter(function (e) { return e.start <= iso && iso <= (e.end || e.start); })
       .sort(function (a, b) { return (a.start + (a.time || "")).localeCompare(b.start + (b.time || "")); });
   }
-  function openEv(e, start) { ui.cal.form = e ? { id: e.id } : { id: null, start: start }; render(); }
+  function openEv(e, start) {
+    if (e && e.ro) { if (canFunc()) { ui.view = "funcionarios"; render(); } return; }
+    ui.cal.form = e ? { id: e.id } : { id: null, start: start }; render();
+  }
   function evForm() {
     var f = ui.cal.form, ev = f.id ? state.events.filter(function (e) { return e.id === f.id; })[0] : null;
     if (f.id && !ev) { ui.cal.form = null; return null; }
@@ -1082,7 +1145,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     var start = h("input", { id: "ev-s", type: "date", required: "required", value: t.start });
     var end = h("input", { id: "ev-e", type: "date", value: t.end || t.start });
     var time = h("input", { id: "ev-h", type: "time", value: t.time || "" });
-    var cat = h("select", { id: "ev-c" }, Object.keys(CATS).map(function (k) { return h("option", { value: k, text: CATS[k], selected: k === (CATS[t.cat] ? t.cat : "outros") ? "selected" : false }); }));
+    var cat = h("select", { id: "ev-c" }, sortedTypes().map(function (x) { return h("option", { value: x.id, text: x.name, selected: x.id === (CATS[t.cat] ? t.cat : "outros") ? "selected" : false }); }));
     var note = h("input", { id: "ev-n", type: "text", maxlength: "120", value: t.note || "" });
     var actions = [];
     if (ev) actions.push(h("button", { class: "btn danger", type: "button", text: "Excluir", onclick: function () { state.events = state.events.filter(function (x) { return x.id !== ev.id; }); ui.cal.form = null; save(); render(); } }));
@@ -1135,20 +1198,21 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       grid.appendChild(cell);
     })(d);
     box.appendChild(grid);
-    box.appendChild(h("div", { class: "cal-legend" }, Object.keys(CATS).map(function (k) { return h("span", null, [h("span", { class: "dot", style: "border-color:" + evColor(k) }), CATS[k]]); })));
+    box.appendChild(h("div", { class: "cal-legend" }, sortedTypes().map(function (t) { return h("span", null, [h("span", { class: "dot", style: "border-color:" + evColor(t.id) }), t.name]); })
+      .concat(state.ferias.length ? [h("span", null, [h("span", { class: "dot", style: "border-color:" + FERC }), "Férias"])] : [])));
     function row(e) {
       return h("div", { class: "ev-row" }, [
         h("div", { class: "ev-main" }, [
           h("div", { class: "ev-title" }, [h("span", { class: "dot", style: "border-color:" + evColor(e.cat) }), e.title]),
-          h("div", { class: "ev-meta", text: fmtRange(e) + (e.time ? " às " + e.time : "") + " · " + (CATS[e.cat] || "Outros") + (e.note ? " · " + e.note : "") })
+          h("div", { class: "ev-meta", text: fmtRange(e) + (e.time ? " às " + e.time : "") + " · " + catName(e.cat) + (e.note ? " · " + e.note : "") })
         ]),
-        h("div", { class: "card-foot", style: "border:none;padding:0" }, [
+        e.ro ? (canFunc() ? h("div", { class: "card-foot", style: "border:none;padding:0" }, [h("button", { class: "icon-btn", type: "button", text: "Ver em Funcionários", onclick: function () { openEv(e); } })]) : null) : h("div", { class: "card-foot", style: "border:none;padding:0" }, [
           h("button", { class: "icon-btn", type: "button", text: "Editar", onclick: function () { openEv(e); } }),
           h("button", { class: "icon-btn del", type: "button", text: "Excluir", onclick: function () { state.events = state.events.filter(function (x) { return x.id !== e.id; }); if (ui.cal.form && ui.cal.form.id === e.id) ui.cal.form = null; save(); render(); } })
         ])
       ]);
     }
-    var up = upcoming(), past = state.events.filter(function (e) { return (e.end || e.start) < todayIso; }).sort(function (a, b) { return b.start.localeCompare(a.start); });
+    var up = upcoming(), past = allEvents().filter(function (e) { return (e.end || e.start) < todayIso; }).sort(function (a, b) { return b.start.localeCompare(a.start); });
     var lst = h("div", { class: "ev-list" }, [h("h3", { text: "Próximas programações · " + up.length })]);
     if (!up.length) lst.appendChild(h("p", { class: "hint", text: "Nenhuma programação futura. Clique em um dia do calendário para adicionar." }));
     up.forEach(function (e) { lst.appendChild(row(e)); });
@@ -1156,9 +1220,129 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     box.appendChild(lst);
   }
 
+
+  /* ----- aba Funcionários ----- */
+  function newFunc() { return { id: "F" + Date.now().toString(36), nome: "", cargo: "", contato: "", entrada: "", saida: "", contratacao: "", aniversario: "", ferias: [] }; }
+  function tenure(iso) {
+    var a = iso.split("-").map(Number), b = todayIso.split("-").map(Number);
+    var m = (b[0] - a[0]) * 12 + (b[1] - a[1]) - (b[2] < a[2] ? 1 : 0);
+    if (m < 0) return "contratação futura";
+    var y = Math.floor(m / 12), r = m % 12, t = [];
+    if (y) t.push(y + (y === 1 ? " ano" : " anos"));
+    if (r) t.push(r + (r === 1 ? " mês" : " meses"));
+    return t.length ? t.join(" e ") + " de casa" : "menos de 1 mês de casa";
+  }
+  function birthInfo(iso) {
+    var a = iso.split("-").map(Number), t = todayIso.split("-").map(Number);
+    var today = new Date(t[0], t[1] - 1, t[2]), next = new Date(t[0], a[1] - 1, a[2]);
+    if (next < today) next = new Date(t[0] + 1, a[1] - 1, a[2]);
+    var days = Math.round((next - today) / 86400000), age = next.getFullYear() - a[0];
+    var when = days === 0 ? "hoje" : days === 1 ? "amanhã" : days <= 30 ? "em " + days + " dias" : "";
+    return "Aniversário " + String(a[2]).padStart(2, "0") + "/" + String(a[1]).padStart(2, "0") + (age > 0 && age < 120 ? " · faz " + age + " anos" : "") + (when ? " (" + when + ")" : "");
+  }
+  function contactEl(c) {
+    var digits = c.replace(/\D/g, "");
+    if (c.indexOf("@") > 0) return h("a", { href: "mailto:" + c, text: c });
+    if (digits.length >= 10) {
+      var wa = "https://wa.me/" + (digits.slice(0, 2) === "55" ? digits : "55" + digits);
+      return h("span", null, [h("a", { href: "tel:" + digits, text: c }), " · ", h("a", { href: wa, target: "_blank", rel: "noopener", text: "WhatsApp" })]);
+    }
+    return h("span", { text: c });
+  }
+  function funcForm() {
+    var F = ui.func, d = F.draft;
+    function inp(id, type, key, extra) {
+      var el = h("input", Object.assign({ id: id, type: type, value: d[key] || "" }, extra || {}));
+      el.addEventListener("input", function () { d[key] = el.value; });
+      return el;
+    }
+    var nome = inp("fn-n", "text", "nome", { required: "required", maxlength: "60" });
+    var cargo = inp("fn-c", "text", "cargo", { maxlength: "40" });
+    var contato = inp("fn-t", "text", "contato", { maxlength: "40", placeholder: "Telefone, WhatsApp ou e-mail" });
+    var ent = inp("fn-e", "time", "entrada"), sai = inp("fn-s", "time", "saida");
+    var cont = inp("fn-h", "date", "contratacao"), ani = inp("fn-a", "date", "aniversario");
+    var ferBox = h("div", { style: "display:flex;flex-direction:column;gap:6px" });
+    d.ferias.forEach(function (p, i) {
+      var a = h("input", { type: "date", value: p.ini || "", "aria-label": "Início das férias" }), b = h("input", { type: "date", value: p.fim || "", "aria-label": "Fim das férias" });
+      a.addEventListener("input", function () { p.ini = a.value; if (!p.fim) { p.fim = a.value; b.value = a.value; } });
+      b.addEventListener("input", function () { p.fim = b.value; });
+      ferBox.appendChild(h("div", { class: "fer-row" }, [h("label", null, ["Início", a]), h("label", null, ["Fim", b]),
+        h("button", { class: "btn danger", type: "button", text: "Remover", onclick: function () { d.ferias.splice(i, 1); render(); } })]));
+    });
+    return h("form", { class: "edit ev-form func-form", onsubmit: function (e) {
+      e.preventDefault();
+      if (!d.nome.trim()) return;
+      var rec = JSON.parse(JSON.stringify(d));
+      rec.ferias = rec.ferias.filter(function (p) { return validDate(p.ini); });
+      var c = cleanFunc([rec]);
+      if (!c || !c.length) return;
+      if (F.editId) state.funcionarios = state.funcionarios.map(function (x) { return x.id === F.editId ? c[0] : x; });
+      else state.funcionarios.push(c[0]);
+      state.ferias = deriveFerias();
+      F.draft = null; F.editId = null; save(); render();
+    } }, [
+      h("label", { for: nome.id }, ["Nome", nome]),
+      h("div", { class: "row" }, [h("label", { for: cargo.id }, ["Cargo", cargo]), h("label", { for: contato.id }, ["Contato", contato])]),
+      h("div", { class: "row3" }, [h("label", { for: ent.id }, ["Entrada", ent]), h("label", { for: sai.id }, ["Saída", sai]), h("label", { for: cont.id }, ["Contratação", cont])]),
+      h("div", { class: "row" }, [h("label", { for: ani.id }, ["Aniversário (data de nascimento)", ani])]),
+      h("div", { style: "font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" }, ["Períodos de férias"]),
+      ferBox,
+      h("div", null, [h("button", { class: "btn", type: "button", text: "+ Adicionar período de férias", onclick: function () { d.ferias.push({ ini: "", fim: "" }); render(); } })]),
+      h("div", { class: "actions" }, [
+        h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { F.draft = null; F.editId = null; render(); } }),
+        h("button", { class: "btn primary", type: "submit", text: F.editId ? "Salvar" : "Adicionar" })
+      ])
+    ]);
+  }
+  function funcCard(f) {
+    var F = ui.func, vac = f.ferias.some(function (p) { return p.ini <= todayIso && todayIso <= p.fim; });
+    var meta = [];
+    var line1 = [f.cargo, f.entrada || f.saida ? (f.entrada || "?") + " às " + (f.saida || "?") : ""].filter(Boolean).join(" · ");
+    if (line1) meta.push(h("div", { class: "func-meta", text: line1 }));
+    if (f.contato) meta.push(h("div", { class: "func-meta" }, [contactEl(f.contato)]));
+    if (f.contratacao) meta.push(h("div", { class: "func-meta", text: "Contratado em " + fmtDate(f.contratacao) + " · " + tenure(f.contratacao) }));
+    if (f.aniversario) meta.push(h("div", { class: "func-meta", text: birthInfo(f.aniversario) }));
+    if (f.ferias.length) {
+      meta.push(h("div", { class: "func-meta", style: "margin-top:4px;font-weight:600", text: "Férias" }));
+      f.ferias.forEach(function (p) {
+        var st = p.fim < todayIso ? "passada" : p.ini <= todayIso ? "em andamento" : "programada";
+        meta.push(h("div", { class: "func-meta", text: fmtDate(p.ini) + (p.fim !== p.ini ? " a " + fmtDate(p.fim) : "") + " · " + st }));
+      });
+    }
+    var rm = F.removing === f.id;
+    return h("article", { class: "func-card" }, [
+      h("div", { class: "func-head" }, [h("span", { class: "func-name", text: f.nome }), vac ? h("span", { class: "badge-fer", text: "De férias" }) : null])
+    ].concat(meta, [
+      rm ? h("div", { class: "set-confirm" }, [
+        h("span", { text: "Remover " + f.nome + "? Os períodos de férias também saem do calendário." }),
+        h("button", { class: "btn primary", type: "button", text: "Remover", onclick: function () { state.funcionarios = state.funcionarios.filter(function (x) { return x.id !== f.id; }); state.ferias = deriveFerias(); F.removing = null; save(); render(); } }),
+        h("button", { class: "btn", type: "button", text: "Cancelar", onclick: function () { F.removing = null; render(); } })
+      ]) : h("div", { class: "card-foot", style: "border:none;padding:0;margin-top:4px" }, [
+        h("button", { class: "icon-btn", type: "button", text: "Editar", onclick: function () { F.draft = JSON.parse(JSON.stringify(f)); F.editId = f.id; F.removing = null; render(); } }),
+        h("button", { class: "icon-btn del", type: "button", text: "Remover", onclick: function () { F.removing = f.id; render(); } })
+      ])
+    ]));
+  }
+  function renderFunc() {
+    var box = document.getElementById("func"); box.textContent = "";
+    var F = ui.func;
+    box.appendChild(h("div", { class: "cal-head" }, [
+      h("h2", { text: "Funcionários · " + state.funcionarios.length }),
+      h("span", { class: "grow" }),
+      h("button", { class: "btn primary", type: "button", text: "+ Novo funcionário", onclick: function () { F.draft = newFunc(); F.editId = null; F.removing = null; render(); } })
+    ]));
+    box.appendChild(h("p", { class: "hint", text: cloudOn()
+      ? "Esta aba é visível só para a administradora. As férias lançadas aparecem no calendário para toda a equipe (apenas nome e período)."
+      : "Os períodos de férias lançados aparecem no calendário." }));
+    if (F.draft) box.appendChild(funcForm());
+    var list = state.funcionarios.slice().sort(function (a, b) { return a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }); });
+    if (!list.length && !F.draft) box.appendChild(h("p", { class: "hint", text: "Nenhum funcionário cadastrado. Use “+ Novo funcionário”." }));
+    box.appendChild(h("div", { class: "func-list" }, list.map(funcCard)));
+  }
+
   function renderTabs(o, d) {
     var nav = document.getElementById("tabs"); nav.textContent = "";
-    [{ v: "quadro", label: "Quadro · " + o }, { v: "realizadas", label: "Realizadas · " + d }, { v: "dashboards", label: "Dashboards" }, { v: "calendario", label: "Calendário" }].forEach(function (x) {
+    [{ v: "quadro", label: "Quadro · " + o }, { v: "realizadas", label: "Realizadas · " + d }, { v: "dashboards", label: "Dashboards" }, { v: "calendario", label: "Calendário" }].concat(canFunc() ? [{ v: "funcionarios", label: "Funcionários" }] : []).forEach(function (x) {
       nav.appendChild(h("button", { class: "tab", type: "button", "aria-current": ui.view === x.v ? "page" : false, text: x.label,
         onclick: function () { ui.view = x.v; render(); } }));
     });
@@ -1214,7 +1398,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     return lines.join("\n").replace(/\s+$/, "");
   }
   function upcoming() {
-    return state.events.filter(function (e) { return (e.end || e.start) >= todayIso; }).sort(function (a, b) { return (a.start + (a.time || "")).localeCompare(b.start + (b.time || "")); });
+    return allEvents().filter(function (e) { return (e.end || e.start) >= todayIso; }).sort(function (a, b) { return (a.start + (a.time || "")).localeCompare(b.start + (b.time || "")); });
   }
   function fmtRange(e) { return e.end && e.end !== e.start ? fmtShort(e.start) + " a " + fmtShort(e.end) : fmtShort(e.start); }
   function calMessage() {
@@ -1336,7 +1520,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   function renderTypeSettings(box) {
     box.appendChild(h("h3", { text: "Tipos do calendário", style: "margin:14px 0 0;font-family:var(--font-display);font-size:1.25rem" }));
     box.appendChild(h("p", { class: "hint", text: "Os tipos aparecem ao cadastrar uma programação e na legenda do calendário. Altere o nome e a mudança vale ao sair do campo. “Outros” é o tipo de reserva: pode ser renomeado, mas não removido." }));
-    state.evTypes.forEach(function (t) {
+    sortedTypes().forEach(function (t) {
       var count = state.events.filter(function (e) { return e.cat === t.id; }).length;
       var name = h("input", { id: "tn-" + t.id, type: "text", value: t.name, maxlength: "30", "aria-label": "Nome do tipo", onchange: function (e) {
         var v = e.target.value.trim(); if (v) { t.name = v; syncCats(); save(); } render();
@@ -1429,6 +1613,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       var fb = cloud.fb;
       var data = JSON.parse(JSON.stringify({ cols: state.cols, tasks: state.tasks, events: state.events, next: state.next, seed: state.seed || "", evSeed: state.evSeed || "", v: VERSION, by: CLIENT }));
       if (typesCustom()) data.evTypes = JSON.parse(JSON.stringify(state.evTypes));
+      if (state.ferias.length) data.ferias = JSON.parse(JSON.stringify(state.ferias));
       data.updatedAt = fb.serverTimestamp();
       cloudStatus("Salvando na nuvem…", "wait");
       Promise.resolve(fb.setDoc(cloud.ref, data)).then(
@@ -1442,6 +1627,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     if (!n) return;
     state.cols = n.cols; state.tasks = n.tasks; state.next = n.next; state.events = n.events || [];
     state.evTypes = n.evTypes || defTypes(); syncCats();
+    state.ferias = canFunc() ? deriveFerias() : (n.ferias || []);
     state.seed = SEED_VERSION; state.evSeed = "1.4"; state.example = false; state.hideNotice = true;
     if (ui.editing && !state.tasks.some(function (t) { return t.id === ui.editing; })) ui.editing = null;
     if (ui.adding && !state.cols.some(function (c) { return c.id === ui.adding; })) ui.adding = null;
@@ -1452,7 +1638,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     if (cloud.unsub) { try { cloud.unsub(); } catch (e) {} }
     cloud.unsub = null; cloud.ready = false;
     cloud.subs.forEach(function (u) { try { u(); } catch (e) {} });
-    cloud.subs = []; cloud.fotos = []; cloud.users = []; cloud.reqs = []; cloud.cfg = {};
+    cloud.subs = []; cloud.fotos = []; cloud.users = []; cloud.reqs = []; cloud.cfg = {}; cloud.funcReady = false; cloud.funcSent = "";
   }
   function sub(ref, fn, label) {
     cloud.subs.push(cloud.fb.onSnapshot(ref, fn, function (e) {
@@ -1476,6 +1662,19 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
       cloudStatus(code === "permission-denied" ? "Sem permissão para acessar os dados da nuvem" : "Erro na nuvem: " + code, "err");
     });
   }
+  function funcPush() {
+    if (!cloud.granted || !cloud.admin || !cloud.funcReady) return;
+    var hsh = JSON.stringify(state.funcionarios);
+    if (hsh === cloud.funcSent) return;
+    clearTimeout(cloud.ftimer);
+    cloud.ftimer = setTimeout(function () {
+      var fb = cloud.fb, body = JSON.stringify(state.funcionarios);
+      cloud.funcSent = body;
+      Promise.resolve(fb.setDoc(fb.doc(cloud.db, "manutencao", "funcionarios"), { lista: JSON.parse(body), by: CLIENT, updatedAt: fb.serverTimestamp() })).catch(function (e) {
+        cloud.funcSent = ""; cloudStatus("Erro ao salvar funcionários: " + ((e && e.code) || "desconhecido") + ". Os dados continuam salvos neste aparelho.", "err");
+      });
+    }, 400);
+  }
   function grant() {
     if (cloud.granted) return;
     var fb = cloud.fb, db = cloud.db;
@@ -1484,6 +1683,16 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     sub(fb.collection(db, "fotos"), function (snap) { var a = []; snap.forEach(function (d) { var x = d.data(); x.id = d.id; a.push(x); }); cloud.fotos = a; render(); }, "fotos");
     sub(fb.doc(db, "manutencao", "config"), function (snap) { cloud.cfg = snap.exists() ? snap.data() : {}; render(); }, "config");
     if (cloud.admin) {
+      sub(fb.doc(db, "manutencao", "funcionarios"), function (snap) {
+        var meta = snap.metadata || {};
+        cloud.funcReady = true;
+        if (!snap.exists()) { funcPush(); return; }
+        if (meta.hasPendingWrites) return;
+        var d = snap.data(); if (d.by === CLIENT) return;
+        var l = cleanFunc(d.lista) || [];
+        state.funcionarios = l; cloud.funcSent = JSON.stringify(l); state.ferias = deriveFerias();
+        localSave(); cloudPush(); render();
+      }, "funcionários");
       sub(fb.collection(db, "usuarios"), function (snap) { var a = []; snap.forEach(function (d) { a.push(d.data()); }); cloud.users = a; render(); }, "usuários");
       sub(fb.collection(db, "solicitacoes"), function (snap) { var a = []; snap.forEach(function (d) { a.push(d.data()); }); cloud.reqs = a; render(); }, "pedidos");
     }
@@ -1494,7 +1703,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     cloud.granted = false; stopAll();
     if (wipe && !cloud.admin) {
       try { localStorage.removeItem(KEY); } catch (e) {}
-      state.tasks = []; state.events = [];
+      state.tasks = []; state.events = []; state.funcionarios = []; state.ferias = [];
     }
     ui.sheet = null; ui.adding = null; ui.editing = null;
     render();
