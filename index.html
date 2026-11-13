@@ -440,7 +440,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 <script src="firebase-config.js"></script>
 <script>
 (function () {
-  var VERSION = "1.12.2";
+  var VERSION = "1.12.3";
   var KEY = "manutencao-quadro-v0";
   var OLD_DAYS = 30;
   var DEFAULT_COLS = [
@@ -1419,7 +1419,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
     order.forEach(function (k) {
       lines.push("", "*" + catName(k) + "*");
       groups[k].forEach(function (e) {
-        lines.push("• " + e.title + " — " + fmtRange(e) + (e.cat === "__ferias" ? " (" + diasTxt(spanDays(e.start, e.end || e.start)) + ")" : "") + (e.time ? " às " + e.time : "") + (e.note ? " (" + e.note + ")" : ""));
+        lines.push("• " + fmtRange(e) + (e.cat === "__ferias" ? " (" + diasTxt(spanDays(e.start, e.end || e.start)) + ")" : "") + (e.time ? " às " + e.time : "") + " — " + e.title + (e.note ? " (" + e.note + ")" : ""));
       });
     });
     return lines.join("\n");
