@@ -438,7 +438,7 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
 <script src="firebase-config.js"></script>
 <script>
 (function () {
-  var VERSION = "1.12";
+  var VERSION = "1.12.1";
   var KEY = "manutencao-quadro-v0";
   var OLD_DAYS = 30;
   var DEFAULT_COLS = [
@@ -1404,9 +1404,16 @@ form.ev-form .row3 input { width: 100%; min-width: 0; max-width: 100%; }
   function calMessage() {
     var ev = upcoming();
     if (!ev.length) return "";
-    return ["*Calendário de programações*"].concat(ev.map(function (e) {
-      return "• " + e.title + " — " + fmtRange(e) + (e.time ? " às " + e.time : "") + (e.note ? " (" + e.note + ")" : "");
-    })).join("\n");
+    var lines = ["*Calendário de programações*"], groups = {}, order = [];
+    ev.forEach(function (e) { var k = e.cat || "outros"; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(e); });
+    order.sort(function (a, b) { return catName(a).localeCompare(catName(b), "pt-BR", { sensitivity: "base" }); });
+    order.forEach(function (k) {
+      lines.push("", "*" + catName(k) + "*");
+      groups[k].forEach(function (e) {
+        lines.push("• " + e.title + " — " + fmtRange(e) + (e.time ? " às " + e.time : "") + (e.note ? " (" + e.note + ")" : ""));
+      });
+    });
+    return lines.join("\n");
   }
   function buildMessage(mode) {
     mode = mode || ui.wmode;
